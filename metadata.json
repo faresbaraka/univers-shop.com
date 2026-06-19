@@ -1,0 +1,6 @@
+{
+  "name": "Univers Shop",
+  "description": "Une boutique e-commerce moderne et securisee pour acheter vos produits preferes en dinars algeriens (DA)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
