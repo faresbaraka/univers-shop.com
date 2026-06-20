@@ -53,9 +53,30 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
   // Created order state for tickets
   const [orderReceipt, setOrderReceipt] = useState<Order | null>(null);
 
+  // Secure Gateway states
+  const [isChargilyConfigured, setIsChargilyConfigured] = useState(false);
+  const [isPaymentLoading, setIsPaymentLoading] = useState(false);
+  const [useRealChargily, setUseRealChargily] = useState(false);
+  const [gatewayError, setGatewayError] = useState('');
+
   const selectedWilaya = ALGERIAN_WILAYAS.find(w => w.code === selectedWilayaCode) || ALGERIAN_WILAYAS[15]; // default Alger
   const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
   const totalAmount = subtotal + selectedWilaya.shippingFee;
+
+  // Fetch state configuration from secure proxy backend
+  useEffect(() => {
+    fetch('/api/payments/config')
+      .then(res => res.json())
+      .then(data => {
+        if (data.hasChargilyKey) {
+          setIsChargilyConfigured(true);
+          setUseRealChargily(true);
+        }
+      })
+      .catch(err => {
+        console.warn("Could not query payment configuration:", err);
+      });
+  }, []);
 
   // Simulate secure OTP generation
   useEffect(() => {
@@ -117,13 +138,58 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
     }
   };
 
-  const handleCreateOrder = () => {
+  const handleCreateOrder = async () => {
     if (paymentMethod === 'edahabia') {
-      if (!validateCardDetails()) {
-        return;
+      if (useRealChargily) {
+        setIsPaymentLoading(true);
+        setGatewayError('');
+        try {
+          const response = await fetch('/api/payments/chargily-checkout', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              amount: totalAmount,
+              customerName: name,
+              customerPhone: phone,
+              customerAddress: address,
+              customerWilaya: selectedWilaya.name,
+              successUrl: window.location.href,
+              failureUrl: window.location.href,
+            }),
+          });
+          
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || "Impossible d'initier la transaction sécurisée.");
+          }
+          
+          if (data.simulation) {
+            // Server has no key; gracefully fallback to simulation mode and notify user
+            console.log("No Chargily App Key found. Falling back to offline client simulator.");
+            setUseRealChargily(false);
+            // Go to step 3 to present simulator
+            setStep(3);
+          } else if (data.checkoutUrl) {
+            // Direct secure redirection path
+            console.log("Secure transaction initiated. Redirecting client to official Chargily checkout page.");
+            window.open(data.checkoutUrl, '_blank');
+            submitFinalOrder();
+          }
+        } catch (err: any) {
+          console.error("Payment Gateway error:", err);
+          setGatewayError(err.message || "Erreur de connexion lors de la transmission SSL.");
+        } finally {
+          setIsPaymentLoading(false);
+        }
+      } else {
+        if (!validateCardDetails()) {
+          return;
+        }
+        // Go to simulated 3D Secure OTP step
+        setStep(3);
       }
-      // Go to simulated 3D Secure OTP step
-      setStep(3);
     } else if (paymentMethod === 'baridimob' && !receiptImg) {
       setErrors({ receipt: 'Veuillez télécharger un reçu ou une preuve de virement BaridiMob pour la sécurité du paiement.' });
     } else {
@@ -159,7 +225,7 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
       })),
       totalAmount: totalAmount,
       paymentMethod: paymentMethod,
-      paymentStatus: paymentMethod === 'delivery' ? 'pending' : 'verified',
+      paymentStatus: paymentMethod === 'delivery' ? 'pending' : (useRealChargily ? 'pending' : 'verified'),
       orderStatus: 'received',
       transactionDate: new Date().toLocaleDateString('fr-DZ', {
         year: 'numeric',
@@ -169,7 +235,7 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
         minute: '2-digit'
       }),
       receiptScreenshot: paymentMethod === 'baridimob' ? receiptImg : undefined,
-      cardLastFour: paymentMethod === 'edahabia' ? cardNumber.slice(-4) : undefined,
+      cardLastFour: paymentMethod === 'edahabia' ? (cardNumber ? cardNumber.slice(-4) : 'API') : undefined,
       otpVerified: paymentMethod === 'edahabia'
     };
 
@@ -422,67 +488,139 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
 
               {/* Secure Card Inputs */}
               {paymentMethod === 'edahabia' && (
-                <div className="bg-slate-50 border border-slate-200/60 p-5 rounded-2xl space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-200/60 pb-3 mb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                      <Lock className="w-3.5 h-3.5 text-sky-600" />
-                      Écran Certifié SSL Algérie Poste
-                    </span>
-                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-sm">Crypté AES-256</span>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Numéro de Carte CIB / Edahabia</label>
-                    <input 
-                      type="text" 
-                      maxLength={19}
-                      placeholder="6081 1011 0000 0000"
-                      value={cardNumber}
-                      onChange={(e) => handleCardNumberChange(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-500/20"
-                    />
-                    {errors.cardNumber && <p className="text-rose-500 text-[11px] font-semibold mt-1">{errors.cardNumber}</p>}
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Titulaire de la carte</label>
-                    <input 
-                      type="text" 
-                      placeholder="Ex: MOHAMED BENALI"
-                      value={cardHolder}
-                      onChange={(e) => setCardHolder(e.target.value.toUpperCase())}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20"
-                    />
-                    {errors.cardHolder && <p className="text-rose-500 text-[11px] font-semibold mt-1">{errors.cardHolder}</p>}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Date d'Expiration</label>
-                      <input 
-                        type="text" 
-                        maxLength={5}
-                        placeholder="MM/AA"
-                        value={cardExpiry}
-                        onChange={(e) => handleExpiryChange(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-center font-mono focus:outline-none focus:ring-2 focus:ring-sky-500/20"
-                      />
-                      {errors.cardExpiry && <p className="text-rose-500 text-[11px] font-semibold mt-1">{errors.cardExpiry}</p>}
+                <div className="space-y-4">
+                  {/* Mode Selector for Edahabia payments */}
+                  <div className="bg-slate-50 border border-slate-100 p-3.5 rounded-2xl flex flex-col gap-2">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Options de Caisse CIB/Edahabia</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isChargilyConfigured) {
+                            setUseRealChargily(true);
+                          } else {
+                            alert("Pour activer les transactions réelles d'Algérie Poste (CIB/Edahabia), veuillez configurer la variable d'environnement CHARGILY_APP_KEY dans vos secrets de serveur. Vous pouvez utiliser le simulateur interactif ci-dessous pour le test.");
+                          }
+                        }}
+                        className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          useRealChargily 
+                            ? 'bg-sky-600 text-white shadow-sm' 
+                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        Passerelle Réelle
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setUseRealChargily(false)}
+                        className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          !useRealChargily 
+                            ? 'bg-slate-800 text-white shadow-sm' 
+                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <CreditCard className="w-3.5 h-3.5" />
+                        Simulateur 3D
+                      </button>
                     </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Code CVV</label>
-                      <input 
-                        type="password" 
-                        maxLength={3}
-                        placeholder="..."
-                        value={cardCvv}
-                        onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, ''))}
-                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-center font-mono focus:outline-none focus:ring-2 focus:ring-sky-500/20"
-                      />
-                      {errors.cardCvv && <p className="text-rose-500 text-[11px] font-semibold mt-1">{errors.cardCvv}</p>}
-                    </div>
+                    {isChargilyConfigured ? (
+                      <p className="text-[10px] text-emerald-600 font-semibold mt-1">
+                        ✓ Gateway officiel Chargily de production connecté avec succès en DZD.
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-slate-500 font-medium mt-1 font-sans">
+                        Fidélité démo active. Aucun compte requis pour simuler le paiement.
+                      </p>
+                    )}
                   </div>
+
+                  {useRealChargily ? (
+                    <div className="bg-sky-50 border border-sky-100 p-5 rounded-2xl space-y-3">
+                      <div className="flex items-center gap-2 text-sky-900 border-b border-sky-100 pb-2">
+                        <Lock className="w-5 h-5 text-sky-600 flex-shrink-0" />
+                        <h4 className="font-bold text-sm">Chiffrement SSL de bout-en-bout (Redirection Officielle)</h4>
+                      </div>
+                      <p className="text-xs text-sky-800 leading-relaxed font-sans">
+                        Conformément aux normes internationales de sécurité bancaire <b>PCI-DSS</b>, vos données de carte bancaire ne transitent jamais par notre serveur Univers Shop.
+                      </p>
+                      <p className="text-xs text-sky-800 font-medium leading-relaxed font-sans">
+                        En cliquant sur "Valider le Paiement", vous serez redirigé vers la page sécurisée hautement cryptée de <b>Chargily Pay</b> pour insérer vos informations Edahabia en Dinars (DZD).
+                      </p>
+                      
+                      {isPaymentLoading && (
+                        <div className="flex items-center justify-center gap-2 py-3 bg-white rounded-xl border border-sky-150 text-sky-600 text-xs font-bold animate-pulse">
+                          <span>Initialisation du canal de paiement SSL...</span>
+                        </div>
+                      )}
+                      {gatewayError && (
+                        <p className="text-rose-500 text-xs font-bold bg-rose-50 p-3 rounded-xl border border-rose-100">{gatewayError}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-slate-50 border border-slate-200/60 p-5 rounded-2xl space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-200/60 pb-3 mb-2">
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                          <Lock className="w-3.5 h-3.5 text-sky-600" />
+                          Écran Certifié SSL Algérie Poste (Démo)
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-500 bg-slate-200 px-2 py-0.5 rounded-sm">Simulation de Chiffrement</span>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Numéro de Carte CIB / Edahabia</label>
+                        <input 
+                          type="text" 
+                          maxLength={19}
+                          placeholder="6081 1011 0000 0000"
+                          value={cardNumber}
+                          onChange={(e) => handleCardNumberChange(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                        />
+                        {errors.cardNumber && <p className="text-rose-500 text-[11px] font-semibold mt-1">{errors.cardNumber}</p>}
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Titulaire de la carte</label>
+                        <input 
+                          type="text" 
+                          placeholder="Ex: MOHAMED BENALI"
+                          value={cardHolder}
+                          onChange={(e) => setCardHolder(e.target.value.toUpperCase())}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                        />
+                        {errors.cardHolder && <p className="text-rose-500 text-[11px] font-semibold mt-1">{errors.cardHolder}</p>}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Date d'Expiration</label>
+                          <input 
+                            type="text" 
+                            maxLength={5}
+                            placeholder="MM/AA"
+                            value={cardExpiry}
+                            onChange={(e) => handleExpiryChange(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-center font-mono focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                          />
+                          {errors.cardExpiry && <p className="text-rose-500 text-[11px] font-semibold mt-1">{errors.cardExpiry}</p>}
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Code CVV</label>
+                          <input 
+                            type="password" 
+                            maxLength={3}
+                            placeholder="..."
+                            value={cardCvv}
+                            onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, ''))}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-center font-mono focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                          />
+                          {errors.cardCvv && <p className="text-rose-500 text-[11px] font-semibold mt-1">{errors.cardCvv}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

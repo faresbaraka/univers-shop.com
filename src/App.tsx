@@ -21,6 +21,7 @@ import Navbar from './components/Navbar';
 import ProductCard from './components/ProductCard';
 import Checkout from './components/Checkout';
 import AdminPanel from './components/AdminPanel';
+import BuyerOrderPortal from './components/BuyerOrderPortal';
 
 const SELLER_PHONE = '0558926754';
 
@@ -96,6 +97,7 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isOrderPortalOpen, setIsOrderPortalOpen] = useState(false);
   
   // Filtering & Search
   const [selectedCategory, setSelectedCategory] = useState<string>('Tous');
@@ -183,12 +185,14 @@ export default function App() {
     }
   };
 
-  // Orders status Updates (called from admin panel)
-  const handleUpdateOrderStatus = (orderId: string, status: Order['orderStatus']) => {
+  // Orders status Updates (called from admin panel or buyer tracking)
+  const handleUpdateOrderFields = (orderId: string, fields: Partial<Order>) => {
     setOrders(prev => prev.map(order => {
       if (order.id === orderId) {
+        const updated = { ...order, ...fields };
+        
         // If order gets delivered, deduct stock from products to make simulation realistic!
-        if (status === 'delivered' && order.orderStatus !== 'delivered') {
+        if (fields.orderStatus === 'delivered' && order.orderStatus !== 'delivered') {
           order.items.forEach(orderItem => {
             setProducts(currentProducts => currentProducts.map(p => {
               if (p.id === orderItem.productId) {
@@ -198,18 +202,43 @@ export default function App() {
             }));
           });
         }
-        return { ...order, orderStatus: status };
+        
+        // If a return is APPROVED, restock returned products to make it efficient & realistic!
+        if (fields.returnStatus === 'approved' && order.returnStatus !== 'approved') {
+          order.items.forEach(orderItem => {
+            setProducts(currentProducts => currentProducts.map(p => {
+              if (p.id === orderItem.productId) {
+                return { ...p, stock: p.stock + orderItem.quantity, salesCount: Math.max(0, p.salesCount - orderItem.quantity) };
+              }
+              return p;
+            }));
+          });
+          updated.orderStatus = 'returned';
+        }
+        
+        return updated;
       }
       return order;
     }));
   };
 
+  const handleUpdateOrderStatus = (orderId: string, status: Order['orderStatus']) => {
+    handleUpdateOrderFields(orderId, { orderStatus: status });
+  };
+
   const handleUpdatePaymentStatus = (orderId: string, status: Order['paymentStatus']) => {
-    setOrders(prev => prev.map(order => order.id === orderId ? { ...order, paymentStatus: status } : order));
+    handleUpdateOrderFields(orderId, { paymentStatus: status });
   };
 
   const handleOrderSuccess = (newOrder: Order) => {
     setOrders(prev => [newOrder, ...prev]);
+    try {
+      const myOrders = JSON.parse(localStorage.getItem('univers_shop_my_orders') || '[]');
+      myOrders.push(newOrder.id);
+      localStorage.setItem('univers_shop_my_orders', JSON.stringify(myOrders));
+    } catch (e) {
+      console.warn("Could not save new order locally:", e);
+    }
   };
 
   // Filtering products for listing
@@ -249,6 +278,7 @@ export default function App() {
         onOpenCart={() => setIsCartOpen(true)}
         isAdmin={isAdmin}
         onToggleAdmin={setIsAdmin}
+        onOpenOrderPortal={() => setIsOrderPortalOpen(true)}
         sellerPhone={SELLER_PHONE}
       />
 
@@ -262,6 +292,7 @@ export default function App() {
           onDeleteProduct={handleDeleteProduct}
           onUpdateOrderStatus={handleUpdateOrderStatus}
           onUpdatePaymentStatus={handleUpdatePaymentStatus}
+          onUpdateOrderFields={handleUpdateOrderFields}
           sellerPhone={SELLER_PHONE}
         />
       ) : (
@@ -480,6 +511,16 @@ export default function App() {
           onClearCart={handleClearCart}
           onClose={() => setIsCheckoutOpen(false)}
           onOrderSuccess={handleOrderSuccess}
+          sellerPhone={SELLER_PHONE}
+        />
+      )}
+
+      {/* Buyer's Order history & live logistics tracking viewport */}
+      {isOrderPortalOpen && (
+        <BuyerOrderPortal 
+          orders={orders}
+          onUpdateOrderFields={handleUpdateOrderFields}
+          onClose={() => setIsOrderPortalOpen(false)}
           sellerPhone={SELLER_PHONE}
         />
       )}

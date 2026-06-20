@@ -16,7 +16,8 @@ import {
   Camera, 
   Eye, 
   User, 
-  Phone 
+  Phone,
+  Upload
 } from 'lucide-react';
 import { Product, Order, PaymentMethod } from '../types';
 
@@ -28,6 +29,7 @@ interface AdminPanelProps {
   onDeleteProduct: (id: string) => void;
   onUpdateOrderStatus: (orderId: string, status: Order['orderStatus']) => void;
   onUpdatePaymentStatus: (orderId: string, status: Order['paymentStatus']) => void;
+  onUpdateOrderFields?: (orderId: string, fields: Partial<Order>) => void;
   sellerPhone: string;
 }
 
@@ -50,6 +52,7 @@ export default function AdminPanel({
   onDeleteProduct,
   onUpdateOrderStatus,
   onUpdatePaymentStatus,
+  onUpdateOrderFields,
   sellerPhone
 }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'dashboard'>('dashboard');
@@ -64,6 +67,20 @@ export default function AdminPanel({
   const [prodDescription, setProdDescription] = useState('');
   const [prodStock, setProdStock] = useState('10');
   const [prodImageUrl, setProdImageUrl] = useState(STOCK_IMAGE_PRESETS[0].url);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  const handleProductImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIsUploadingImage(true);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProdImageUrl(reader.result as string);
+        setIsUploadingImage(false);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Filter & Search
   const [orderFilter, setOrderFilter] = useState<string>('all');
@@ -167,6 +184,7 @@ export default function AdminPanel({
       case 'processing': return 'bg-blue-50 text-blue-700 border border-blue-100';
       case 'shipped': return 'bg-indigo-50 text-indigo-700 border border-indigo-100';
       case 'delivered': return 'bg-emerald-50 text-emerald-700 border border-emerald-100';
+      case 'returned': return 'bg-rose-50 text-rose-700 border border-rose-100';
     }
   };
 
@@ -177,6 +195,7 @@ export default function AdminPanel({
 
   const filteredOrders = orders.filter(o => {
     if (orderFilter === 'all') return true;
+    if (orderFilter === 'returns_all') return o.returnStatus && o.returnStatus !== 'none';
     return o.paymentStatus === orderFilter || o.orderStatus === orderFilter;
   });
 
@@ -442,19 +461,54 @@ export default function AdminPanel({
                   {/* Right Column Layout: Image Selection */}
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">Adresse URL de l'image (Optionnel)</label>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">Image de l'article (Depuis votre Téléphone / Galerie ou via URL)</label>
+                      
+                      {/* Direct Upload / Camera Access Zone */}
+                      <div className="border-2 border-dashed border-slate-200/80 hover:border-sky-500 rounded-2xl p-4 py-5 bg-slate-50/50 hover:bg-white text-center transition-all cursor-pointer relative">
+                        <label className="flex flex-col items-center justify-center cursor-pointer w-full h-full">
+                          <Upload className="w-7 h-7 text-sky-600 mb-1.5" />
+                          <span className="text-xs font-black text-slate-800">Prendre une photo ou Choisir un fichier</span>
+                          <span className="text-[10px] text-slate-400 mt-1 leading-snug">
+                            Cliquez pour activer l'appareil photo du téléphone ou visiter votre galerie d'images.
+                          </span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleProductImageUpload}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+
+                      {isUploadingImage && (
+                        <div className="text-xs text-sky-600 font-bold bg-sky-50 p-2.5 rounded-xl border border-sky-100/80 text-center animate-pulse mt-2">
+                          Chiffrement et conversion de l'image en cours...
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="relative">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="h-px bg-slate-200 flex-1"></div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">OU ENTRER UNE ADRESSE WEB</span>
+                        <div className="h-px bg-slate-200 flex-1"></div>
+                      </div>
                       <input
                         type="url"
-                        placeholder="https://images.unsplash.com/... (Ou choisissez un modèle ci-dessous)"
-                        value={prodImageUrl}
+                        placeholder="https://images.unsplash.com/... (Saisir un d'internet)"
+                        value={prodImageUrl.startsWith('data:') ? '' : prodImageUrl}
                         onChange={(e) => setProdImageUrl(e.target.value)}
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-2">Banque d'images rapides d'Univers Shop (Recommandé)</label>
-                      <div className="grid grid-cols-4 gap-2.5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="h-px bg-slate-200 flex-1"></div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">OU CHOISIR UN MODÈLE UNIQUE</span>
+                        <div className="h-px bg-slate-200 flex-1"></div>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2">
                         {STOCK_IMAGE_PRESETS.map((preset, idx) => (
                           <button
                             key={idx}
@@ -476,16 +530,16 @@ export default function AdminPanel({
                       </div>
                     </div>
 
-                    <div className="border border-slate-100 rounded-2xl p-4 bg-slate-50 text-center flex flex-col items-center justify-center aspect-video max-w-sm mx-auto">
+                    <div className="border border-slate-100 rounded-2xl p-4 bg-slate-50 text-center flex flex-col items-center justify-center aspect-video max-w-sm mx-auto overflow-hidden">
                       {prodImageUrl ? (
                         <>
                           <img src={prodImageUrl} alt="Prévisualisation" className="max-h-24 rounded-lg object-contain shadow-xs border border-white" />
-                          <span className="text-[10px] text-slate-400 mt-1.5 font-semibold">Prévisualisation de l'article</span>
+                          <span className="text-[10px] text-slate-400 mt-1.5 font-bold">Prévisualisation de l'article</span>
                         </>
                       ) : (
                         <>
                           <Camera className="w-8 h-8 text-slate-300 mb-1" />
-                          <span className="text-[10px] text-slate-400 font-semibold">Choisissez une image</span>
+                          <span className="text-[10px] text-slate-400 font-semibold">Aucune image sélectionnée</span>
                         </>
                       )}
                     </div>
@@ -598,7 +652,9 @@ export default function AdminPanel({
               { id: 'received', label: 'Statut : Reçu' },
               { id: 'processing', label: 'Statut : Préparation' },
               { id: 'shipped', label: 'Statut : En cours de route' },
-              { id: 'delivered', label: 'Statut : Livré sagement' }
+              { id: 'delivered', label: 'Statut : Livré sagement' },
+              { id: 'returns_all', label: '🔍 Demandes de Retours' },
+              { id: 'returned', label: '📦 Retours Terminés' }
             ].map((filter) => (
               <button
                 key={filter.id}
@@ -743,6 +799,7 @@ export default function AdminPanel({
                             <option value="processing">2. En Préparation</option>
                             <option value="shipped">3. Expédié</option>
                             <option value="delivered">4. Livré</option>
+                            <option value="returned">5. Retourné</option>
                           </select>
                         </div>
 
@@ -760,6 +817,59 @@ export default function AdminPanel({
                           </select>
                         </div>
                       </div>
+
+                      {/* Return Request Management Panel */}
+                      {order.returnStatus && order.returnStatus !== 'none' && (
+                        <div className="bg-amber-50/70 p-3.5 border border-amber-200 rounded-2xl space-y-2 mt-2 font-sans text-xs">
+                          <p className="font-bold text-amber-900 flex items-center gap-1">
+                            <span>🔄</span> Demande de Retour : {order.returnStatus === 'requested' ? 'À Valider' : order.returnStatus === 'approved' ? 'Acceptée' : 'Refusée'}
+                          </p>
+                          <p className="text-[10px] text-slate-700 leading-normal font-medium bg-white p-2 rounded-xl border border-slate-100 italic">
+                            Motif déclaré : "{order.returnReason}"
+                          </p>
+                          
+                          {/* Input for admin Return Notes */}
+                          <div className="space-y-1">
+                            <label className="block text-[8px] text-slate-400 font-black uppercase">Fiche / Notes de l'administrateur</label>
+                            <input
+                              type="text"
+                              value={order.adminReturnNotes || ''}
+                              placeholder="Frais retenus, CCP, ou détails..."
+                              onChange={(e) => onUpdateOrderFields && onUpdateOrderFields(order.id, { adminReturnNotes: e.target.value })}
+                              className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-amber-500 font-medium"
+                            />
+                          </div>
+
+                          {order.returnStatus === 'requested' && (
+                            <div className="flex gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (onUpdateOrderFields) {
+                                    onUpdateOrderFields(order.id, { returnStatus: 'approved', orderStatus: 'returned' });
+                                  } else {
+                                    onUpdateOrderStatus(order.id, 'returned');
+                                  }
+                                }}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg cursor-pointer transition-colors"
+                              >
+                                ✓ Accepter & Restocker
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (onUpdateOrderFields) {
+                                    onUpdateOrderFields(order.id, { returnStatus: 'rejected' });
+                                  }
+                                }}
+                                className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg cursor-pointer transition-colors"
+                              >
+                                ✕ Refuser
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

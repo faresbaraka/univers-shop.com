@@ -7,10 +7,11 @@ interface NavbarProps {
   onOpenCart: () => void;
   isAdmin: boolean;
   onToggleAdmin: (status: boolean) => void;
+  onOpenOrderPortal: () => void;
   sellerPhone: string;
 }
 
-export default function Navbar({ cart, onOpenCart, isAdmin, onToggleAdmin, sellerPhone }: NavbarProps) {
+export default function Navbar({ cart, onOpenCart, isAdmin, onToggleAdmin, onOpenOrderPortal, sellerPhone }: NavbarProps) {
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [pinCode, setPinCode] = useState('');
   const [errorPin, setErrorPin] = useState('');
@@ -67,6 +68,17 @@ export default function Navbar({ cart, onOpenCart, isAdmin, onToggleAdmin, selle
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
               <span className="font-medium">Certificat SSL Sécurisé (AES-256)</span>
             </div>
+
+            {/* Direct Order tracking button */}
+            {!isAdmin && (
+              <button
+                onClick={onOpenOrderPortal}
+                className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 text-slate-700 hover:text-[#0052FF] hover:border-[#0052FF]/50 text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer"
+                id="buyer-tracking-trigger"
+              >
+                <span>📦 Suivi & Retours</span>
+              </button>
+            )}
 
             {/* Shopping Cart Button */}
             {!isAdmin && (
@@ -125,6 +137,17 @@ export default function Navbar({ cart, onOpenCart, isAdmin, onToggleAdmin, selle
       {/* Mobile responsive drawer */}
       {mobileMenuOpen && (
         <div className="md:hidden border-t border-slate-100 bg-white px-4 py-4 space-y-3">
+          {!isAdmin && (
+            <button
+              onClick={() => {
+                onOpenOrderPortal();
+                setMobileMenuOpen(false);
+              }}
+              className="w-full flex items-center justify-center gap-1.5 bg-[#0052FF]/10 text-[#0052FF] text-xs font-bold py-3 px-4 rounded-xl hover:bg-[#0052FF]/15 transition-all cursor-pointer"
+            >
+              <span>📦 Suivre mon colis & Retours</span>
+            </button>
+          )}
           <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
             <div className="flex items-center gap-2 text-slate-600">
               <Phone className="w-4 h-4 text-sky-600" />

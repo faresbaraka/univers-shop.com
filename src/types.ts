@@ -33,11 +33,15 @@ export interface Order {
   totalAmount: number;
   paymentMethod: PaymentMethod;
   paymentStatus: 'pending' | 'verified' | 'failed';
-  orderStatus: 'received' | 'processing' | 'shipped' | 'delivered';
+  orderStatus: 'received' | 'processing' | 'shipped' | 'delivered' | 'returned';
   transactionDate: string;
   receiptScreenshot?: string; // Base64 or local representation of upload
   cardLastFour?: string;
   otpVerified: boolean;
+  returnStatus?: 'none' | 'requested' | 'approved' | 'rejected';
+  returnReason?: string;
+  returnDate?: string;
+  adminReturnNotes?: string;
 }
 
 export interface Wilaya {
