@@ -15,13 +15,15 @@ import {
   Lock,
   MessageSquare
 } from 'lucide-react';
-import { Product, CartItem, Order } from './types';
+import { Product, CartItem, Order, StoreSettings } from './types';
 import { INITIAL_PRODUCTS, ALGERIAN_WILAYAS } from './data/mockProducts';
 import Navbar from './components/Navbar';
 import ProductCard from './components/ProductCard';
 import Checkout from './components/Checkout';
 import AdminPanel from './components/AdminPanel';
 import BuyerOrderPortal from './components/BuyerOrderPortal';
+import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { db } from './lib/firebase';
 
 const SELLER_PHONE = '0558926754';
 
@@ -75,26 +77,39 @@ const INITIAL_ORDERS: Order[] = [
 ];
 
 export default function App() {
-  // Products state (persisted)
+  // Products state (persisted on Firestore with localStorage as instant fast-loading fallback)
   const [products, setProducts] = useState<Product[]>(() => {
     const saved = localStorage.getItem('univers_shop_products');
     return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
   });
 
-  // Orders state (persisted)
+  // Orders state (persisted on Firestore with localStorage as instant fast-loading fallback)
   const [orders, setOrders] = useState<Order[]>(() => {
     const saved = localStorage.getItem('univers_shop_orders');
     return saved ? JSON.parse(saved) : INITIAL_ORDERS;
   });
 
-  // Cart state
+  // Shop settings (synchronized with Firestore in real-time)
+  const [settings, setSettings] = useState<StoreSettings>(() => {
+    const saved = localStorage.getItem('univers_shop_settings');
+    return saved ? JSON.parse(saved) : {
+      storeName: 'Univers Shop',
+      logoUrl: '/logo_univers_shop.jpg',
+      sellerPhone: '0558926754'
+    };
+  });
+
+  // Cart state (local user storage)
   const [cart, setCart] = useState<CartItem[]>(() => {
     const saved = localStorage.getItem('univers_shop_cart');
     return saved ? JSON.parse(saved) : [];
   });
 
-  // UI state
-  const [isAdmin, setIsAdmin] = useState(false);
+  // UI state (Persist Admin login across refreshes so the user stays on their custom view)
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    const saved = localStorage.getItem('univers_shop_is_admin');
+    return saved === 'true';
+  });
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isOrderPortalOpen, setIsOrderPortalOpen] = useState(false);
@@ -103,7 +118,12 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<string>('Tous');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Save states to local storage whenever they change
+  // Persist Admin view state
+  useEffect(() => {
+    localStorage.setItem('univers_shop_is_admin', isAdmin ? 'true' : 'false');
+  }, [isAdmin]);
+
+  // Keep local storage up to date on changes/snapshots
   useEffect(() => {
     localStorage.setItem('univers_shop_products', JSON.stringify(products));
   }, [products]);
@@ -111,6 +131,174 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('univers_shop_orders', JSON.stringify(orders));
   }, [orders]);
+
+  useEffect(() => {
+    localStorage.setItem('univers_shop_settings', JSON.stringify(settings));
+  }, [settings]);
+
+  // Load and listen to Store Settings in Firestore in real-time
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, 'settings', 'store'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        let logo = data.logoUrl || '/logo_univers_shop.jpg';
+        
+        // Auto-clean heavy base64 to keep Firestore light and use our new high-quality design!
+        if (logo.startsWith('data:') && logo.length > 6100) {
+          logo = '/logo_univers_shop.jpg';
+          setDoc(doc(db, 'settings', 'store'), {
+            storeName: data.storeName || 'Univers Shop',
+            logoUrl: '/logo_univers_shop.jpg',
+            sellerPhone: data.sellerPhone || '0558926754'
+          }).catch(err => console.error("Auto reset heavy logo error:", err));
+        }
+
+        setSettings({
+          storeName: data.storeName || 'Univers Shop',
+          logoUrl: logo,
+          sellerPhone: data.sellerPhone || '0558926754'
+        });
+      } else {
+        // Safe seeding if the doc doesn't exist yet
+        setDoc(doc(db, 'settings', 'store'), {
+          storeName: 'Univers Shop',
+          logoUrl: '/logo_univers_shop.jpg',
+          sellerPhone: '0558926754'
+        }).catch((err) => console.error('Error generating store document:', err));
+      }
+    }, (error) => {
+      console.error('Error listening to store settings:', error);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // One-time migration of offline products/orders from localStorage to Firestore
+  useEffect(() => {
+    const migrateData = async () => {
+      try {
+        const migratedKey = 'univers_shop_migrated_v2';
+        if (localStorage.getItem(migratedKey)) return;
+
+        // 1. Migrate Products
+        const savedProductsStr = localStorage.getItem('univers_shop_products');
+        if (savedProductsStr) {
+          const localProducts = JSON.parse(savedProductsStr) as Product[];
+          if (Array.isArray(localProducts)) {
+            const initialIds = new Set(INITIAL_PRODUCTS.map(p => p.id));
+            const customProducts = localProducts.filter(p => !initialIds.has(p.id));
+            for (const p of customProducts) {
+              await setDoc(doc(db, 'products', p.id), p);
+            }
+          }
+        }
+
+        // 2. Migrate Orders
+        const savedOrdersStr = localStorage.getItem('univers_shop_orders');
+        if (savedOrdersStr) {
+          const localOrders = JSON.parse(savedOrdersStr) as Order[];
+          if (Array.isArray(localOrders)) {
+            const initialOrderIds = new Set(INITIAL_ORDERS.map(o => o.id));
+            const customOrders = localOrders.filter(o => !initialOrderIds.has(o.id));
+            for (const o of customOrders) {
+              await setDoc(doc(db, 'orders', o.id), o);
+            }
+          }
+        }
+
+        localStorage.setItem(migratedKey, 'true');
+      } catch (err) {
+        console.error('Error during data migration to Firestore:', err);
+      }
+    };
+    migrateData();
+  }, []);
+
+  // Load and listen to Products & Orders in Firestore in real-time
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'products'), (snapshot) => {
+      const prodsList: Product[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        prodsList.push({
+          id: data.id || docSnap.id,
+          name: data.name || 'Produit sans nom',
+          description: data.description || '',
+          price: Number(data.price) || 0,
+          imageUrl: data.imageUrl || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&q=80&w=600',
+          category: data.category || 'Tous',
+          stock: data.stock !== undefined ? Number(data.stock) : 10,
+          salesCount: Number(data.salesCount) || 0,
+          createdAt: data.createdAt || new Date().toISOString()
+        } as Product);
+      });
+      
+      // If collection is completely empty, seed standard products
+      if (prodsList.length === 0 && INITIAL_PRODUCTS.length > 0) {
+        setProducts(INITIAL_PRODUCTS);
+        INITIAL_PRODUCTS.forEach(async (p) => {
+          try {
+            await setDoc(doc(db, 'products', p.id), p);
+          } catch (e) {
+            console.error('Seeding product failed:', p.id, e);
+          }
+        });
+      } else {
+        // Sort products by creation date descending
+        prodsList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setProducts(prodsList);
+      }
+    }, (error) => {
+      console.error('Error reading live products:', error);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'orders'), (snapshot) => {
+      const ordersList: Order[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        ordersList.push({
+          id: data.id || docSnap.id,
+          transactionId: data.transactionId || docSnap.id,
+          customerName: data.customerName || 'Client',
+          customerPhone: data.customerPhone || '',
+          customerAddress: data.customerAddress || '',
+          customerWilaya: data.customerWilaya || '',
+          items: data.items || [],
+          totalAmount: Number(data.totalAmount) || 0,
+          paymentMethod: data.paymentMethod || 'CCP',
+          paymentStatus: data.paymentStatus || 'pending',
+          orderStatus: data.orderStatus || 'received',
+          transactionDate: data.transactionDate || new Date().toLocaleString('fr-DZ'),
+          otpVerified: !!data.otpVerified,
+          ...data
+        } as Order);
+      });
+      
+      // If collection is empty, seed standard orders for dashboard
+      if (ordersList.length === 0 && INITIAL_ORDERS.length > 0) {
+        setOrders(INITIAL_ORDERS);
+        INITIAL_ORDERS.forEach(async (o) => {
+          try {
+            await setDoc(doc(db, 'orders', o.id), o);
+          } catch (e) {
+            console.error('Seeding order failed:', o.id, e);
+          }
+        });
+      } else {
+        // Sort orders by transactionDate/ID
+        ordersList.sort((a, b) => b.id.localeCompare(a.id));
+        setOrders(ordersList);
+      }
+    }, (error) => {
+      console.error('Error reading live orders:', error);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('univers_shop_cart', JSON.stringify(cart));
@@ -164,62 +352,105 @@ export default function App() {
     setCart([]);
   };
 
-  // Product CRUD management (called from admin)
-  const handleAddProduct = (newProd: Omit<Product, 'id' | 'salesCount' | 'createdAt'>) => {
+  // Product CRUD management (called from admin with Firestore sync)
+  const handleAddProduct = async (newProd: Omit<Product, 'id' | 'salesCount' | 'createdAt'>) => {
+    const nextId = 'prod-' + (products.length + 1) + '-' + Math.floor(Math.random() * 1000);
     const productWithId: Product = {
       ...newProd,
-      id: 'prod-' + (products.length + 1) + '-' + Math.floor(Math.random() * 1000),
+      id: nextId,
       salesCount: 0,
       createdAt: new Date().toISOString()
     };
-    setProducts(prev => [productWithId, ...prev]);
-  };
-
-  const handleUpdateProduct = (updatedProd: Product) => {
-    setProducts(prev => prev.map(p => p.id === updatedProd.id ? updatedProd : p));
-  };
-
-  const handleDeleteProduct = (productId: string) => {
-    if (confirm('Voulez-vous vraiment retirer cet article d\'Univers Shop ?')) {
-      setProducts(prev => prev.filter(p => p.id !== productId));
+    try {
+      await setDoc(doc(db, 'products', nextId), productWithId);
+    } catch (e) {
+      console.error('Failed to add product to Firestore:', e);
+      alert('Erreur lors de l\'ajout du produit en base : ' + (e instanceof Error ? e.message : String(e)));
     }
   };
 
-  // Orders status Updates (called from admin panel or buyer tracking)
-  const handleUpdateOrderFields = (orderId: string, fields: Partial<Order>) => {
-    setOrders(prev => prev.map(order => {
-      if (order.id === orderId) {
-        const updated = { ...order, ...fields };
-        
-        // If order gets delivered, deduct stock from products to make simulation realistic!
-        if (fields.orderStatus === 'delivered' && order.orderStatus !== 'delivered') {
-          order.items.forEach(orderItem => {
-            setProducts(currentProducts => currentProducts.map(p => {
-              if (p.id === orderItem.productId) {
-                return { ...p, stock: Math.max(0, p.stock - orderItem.quantity), salesCount: p.salesCount + orderItem.quantity };
-              }
-              return p;
-            }));
-          });
-        }
-        
-        // If a return is APPROVED, restock returned products to make it efficient & realistic!
-        if (fields.returnStatus === 'approved' && order.returnStatus !== 'approved') {
-          order.items.forEach(orderItem => {
-            setProducts(currentProducts => currentProducts.map(p => {
-              if (p.id === orderItem.productId) {
-                return { ...p, stock: p.stock + orderItem.quantity, salesCount: Math.max(0, p.salesCount - orderItem.quantity) };
-              }
-              return p;
-            }));
-          });
-          updated.orderStatus = 'returned';
-        }
-        
-        return updated;
+  const handleUpdateProduct = async (updatedProd: Product) => {
+    try {
+      await setDoc(doc(db, 'products', updatedProd.id), updatedProd);
+    } catch (e) {
+      console.error('Failed to update product in Firestore:', e);
+      alert('Erreur lors de la mise à jour du produit en base : ' + (e instanceof Error ? e.message : String(e)));
+    }
+  };
+
+  const handleDeleteProduct = async (productId: string) => {
+    if (confirm('Voulez-vous vraiment retirer cet article d\'Univers Shop ?')) {
+      try {
+        await deleteDoc(doc(db, 'products', productId));
+      } catch (e) {
+        console.error('Failed to delete product from Firestore:', e);
+        alert('Erreur lors de la suppression du produit en base : ' + (e instanceof Error ? e.message : String(e)));
       }
-      return order;
-    }));
+    }
+  };
+
+  const handleUpdateSettings = async (newSettings: StoreSettings) => {
+    try {
+      await setDoc(doc(db, 'settings', 'store'), newSettings);
+      setSettings(newSettings);
+    } catch (e) {
+      console.error('Failed to update settings in Firestore:', e);
+      throw e;
+    }
+  };
+
+  // Orders status Updates (called from admin panel or buyer tracking, in Firestore)
+  const handleUpdateOrderFields = async (orderId: string, fields: Partial<Order>) => {
+    const existingOrder = orders.find(o => o.id === orderId);
+    if (!existingOrder) return;
+
+    const updated = { ...existingOrder, ...fields };
+    
+    // If order gets delivered, deduct stock from products to make simulation realistic!
+    if (fields.orderStatus === 'delivered' && existingOrder.orderStatus !== 'delivered') {
+      for (const orderItem of existingOrder.items) {
+        const currentProd = products.find(p => p.id === orderItem.productId);
+        if (currentProd) {
+          const prodRef = doc(db, 'products', orderItem.productId);
+          try {
+            await setDoc(prodRef, {
+              ...currentProd,
+              stock: Math.max(0, currentProd.stock - orderItem.quantity),
+              salesCount: currentProd.salesCount + orderItem.quantity
+            });
+          } catch (e) {
+            console.error('Failed to deduct stock for product:', orderItem.productId, e);
+          }
+        }
+      }
+    }
+    
+    // If a return is APPROVED, restock returned products to make it efficient & realistic!
+    if (fields.returnStatus === 'approved' && existingOrder.returnStatus !== 'approved') {
+      for (const orderItem of existingOrder.items) {
+        const currentProd = products.find(p => p.id === orderItem.productId);
+        if (currentProd) {
+          const prodRef = doc(db, 'products', orderItem.productId);
+          try {
+            await setDoc(prodRef, {
+              ...currentProd,
+              stock: currentProd.stock + orderItem.quantity,
+              salesCount: Math.max(0, currentProd.salesCount - orderItem.quantity)
+            });
+          } catch (e) {
+            console.error('Failed to restock product:', orderItem.productId, e);
+          }
+        }
+      }
+      updated.orderStatus = 'returned';
+    }
+
+    try {
+      await setDoc(doc(db, 'orders', orderId), updated);
+    } catch (e) {
+      console.error('Failed to update order fields:', e);
+      alert('Erreur lors de la mise à jour de la commande : ' + (e instanceof Error ? e.message : String(e)));
+    }
   };
 
   const handleUpdateOrderStatus = (orderId: string, status: Order['orderStatus']) => {
@@ -230,14 +461,16 @@ export default function App() {
     handleUpdateOrderFields(orderId, { paymentStatus: status });
   };
 
-  const handleOrderSuccess = (newOrder: Order) => {
-    setOrders(prev => [newOrder, ...prev]);
+  const handleOrderSuccess = async (newOrder: Order) => {
     try {
+      await setDoc(doc(db, 'orders', newOrder.id), newOrder);
+      
       const myOrders = JSON.parse(localStorage.getItem('univers_shop_my_orders') || '[]');
       myOrders.push(newOrder.id);
       localStorage.setItem('univers_shop_my_orders', JSON.stringify(myOrders));
     } catch (e) {
-      console.warn("Could not save new order locally:", e);
+      console.error('Failed to write new order to Firestore:', e);
+      alert('Erreur lors de la soumission de la commande en base : ' + (e instanceof Error ? e.message : String(e)));
     }
   };
 
@@ -266,7 +499,7 @@ export default function App() {
             <span>&bull;</span>
             <span className="flex items-center gap-1 text-sky-400">
               <Phone className="w-3 h-3" />
-              Service Client Algérien : <b>0558926754</b>
+              Service Client Algérien : <b>{settings.sellerPhone}</b>
             </span>
           </div>
         </div>
@@ -279,7 +512,9 @@ export default function App() {
         isAdmin={isAdmin}
         onToggleAdmin={setIsAdmin}
         onOpenOrderPortal={() => setIsOrderPortalOpen(true)}
-        sellerPhone={SELLER_PHONE}
+        sellerPhone={settings.sellerPhone}
+        storeName={settings.storeName}
+        logoUrl={settings.logoUrl}
       />
 
       {/* Primary viewport switch */}
@@ -293,7 +528,9 @@ export default function App() {
           onUpdateOrderStatus={handleUpdateOrderStatus}
           onUpdatePaymentStatus={handleUpdatePaymentStatus}
           onUpdateOrderFields={handleUpdateOrderFields}
-          sellerPhone={SELLER_PHONE}
+          sellerPhone={settings.sellerPhone}
+          storeSettings={settings}
+          onUpdateSettings={handleUpdateSettings}
         />
       ) : (
         /* CLIENT STOREFRONT VIEW */
@@ -311,7 +548,7 @@ export default function App() {
                     Achetez en Sécurité en <span className="underline decoration-white/30 decoration-wavy">Dinars Algériens</span>
                   </h1>
                   <p className="text-white/85 text-xs sm:text-sm leading-relaxed max-w-lg">
-                    Profitez d'une expérience e-commerce premium sur <b>Univers Shop</b>. Ajoutez au panier, simulez votre paiement sécurisé ou réglez par BaridiMob, et faites-vous livrer chez vous dans les 58 wilayas d'Algérie !
+                    Profitez d'une expérience e-commerce premium sur <b>{settings.storeName}</b>. Ajoutez au panier, simulez votre paiement sécurisé ou réglez par BaridiMob, et faites-vous livrer chez vous dans les 58 wilayas d'Algérie !
                   </p>
 
                   {/* Secure Trust stats */}
@@ -326,7 +563,7 @@ export default function App() {
                     </div>
                     <div>
                       <p className="font-display font-black text-white text-lg tracking-tight">24h/24 Support</p>
-                      <p className="text-white/60 text-[9px] font-bold uppercase tracking-wider">Au 0558926754</p>
+                      <p className="text-white/60 text-[9px] font-bold uppercase tracking-wider">Au {settings.sellerPhone}</p>
                     </div>
                   </div>
                 </div>
@@ -337,13 +574,13 @@ export default function App() {
                     <div className="inline-flex p-4 bg-white/15 text-white rounded-full mb-1">
                       <ShieldCheck className="w-10 h-10" />
                     </div>
-                    <h3 className="font-display font-bold text-white text-lg leading-tight">Achetez en Confiance sur Univers Shop</h3>
+                    <h3 className="font-display font-bold text-white text-lg leading-tight">Achetez en Confiance sur {settings.storeName}</h3>
                     <p className="text-[11px] text-white/85 leading-normal">
                       La sécurité de vos fonds est assurée. Nous supportons la vérification par OTP Card et le dépôt sécurisé d'avoirs au compte de virement. 
                     </p>
-                    <a href={`tel:${SELLER_PHONE}`} className="inline-flex items-center gap-1.5 text-xs text-[#0052FF] font-bold bg-white hover:bg-slate-50 px-5 py-2.5 rounded-full shadow-md transition-all cursor-pointer">
+                    <a href={`tel:${settings.sellerPhone}`} className="inline-flex items-center gap-1.5 text-xs text-[#0052FF] font-bold bg-white hover:bg-slate-50 px-5 py-2.5 rounded-full shadow-md transition-all cursor-pointer">
                       <Phone className="w-3.5 h-3.5" />
-                      Appel Direct : {SELLER_PHONE}
+                      Appel Direct : {settings.sellerPhone}
                     </a>
                   </div>
                 </div>
@@ -511,7 +748,7 @@ export default function App() {
           onClearCart={handleClearCart}
           onClose={() => setIsCheckoutOpen(false)}
           onOrderSuccess={handleOrderSuccess}
-          sellerPhone={SELLER_PHONE}
+          sellerPhone={settings.sellerPhone}
         />
       )}
 
@@ -521,7 +758,7 @@ export default function App() {
           orders={orders}
           onUpdateOrderFields={handleUpdateOrderFields}
           onClose={() => setIsOrderPortalOpen(false)}
-          sellerPhone={SELLER_PHONE}
+          sellerPhone={settings.sellerPhone}
         />
       )}
 
@@ -531,11 +768,11 @@ export default function App() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pb-8 border-b border-slate-800">
             {/* Column 1 */}
             <div className="space-y-3">
-              <h4 className="font-display font-bold text-white text-base">Univers Shop</h4>
+              <h4 className="font-display font-bold text-white text-base">{settings.storeName}</h4>
               <p className="text-xs leading-relaxed">
                 Une e-boutique moderne et fiable conçue pour offrir les meilleures garanties de paiement et d'expédition sécurisées en Algérie.
               </p>
-              <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold text-emerald-400 bg-emerald-900/25 border border-emerald-800/60 px-3 py-1 rounded-sm max-w-max">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold text-emerald-400 bg-emerald-950/25 border border-emerald-800/60 px-3 py-1 rounded-sm max-w-max">
                 <ShieldCheck className="w-3.5 h-3.5" />
                 <span>Sécurité SSL (AES-256) Installée</span>
               </div>
@@ -548,9 +785,9 @@ export default function App() {
                 Vous préférez commander par téléphone ou sur WhatsApp ? Contactez-nous à tout moment.
               </p>
               <div className="flex flex-col gap-1">
-                <a href={`tel:${SELLER_PHONE}`} className="text-sm font-bold text-white hover:text-sky-400 transition-colors flex items-center gap-1.5">
+                <a href={`tel:${settings.sellerPhone}`} className="text-sm font-bold text-white hover:text-sky-400 transition-colors flex items-center gap-1.5">
                   <Phone className="w-4 h-4 text-sky-400" />
-                  <span>{SELLER_PHONE}</span>
+                  <span>{settings.sellerPhone}</span>
                 </a>
                 <p className="text-[10px] text-slate-500">Appels directs & Validation de bordereaux 7j/7</p>
               </div>
@@ -565,7 +802,7 @@ export default function App() {
             </div>
           </div>
           <div className="pt-6 flex flex-col sm:flex-row justify-between items-center text-center gap-4 text-xs text-slate-500">
-            <p>&copy; 2026 Univers Shop. Tous droits réservés.</p>
+            <p>&copy; 2026 {settings.storeName}. Tous droits réservés.</p>
             <p className="flex items-center gap-1 text-slate-500">
               <Lock className="w-3.5 h-3.5 text-slate-600" />
               <span>Cryptage cryptographique de bout en bout</span>

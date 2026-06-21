@@ -9,9 +9,11 @@ interface NavbarProps {
   onToggleAdmin: (status: boolean) => void;
   onOpenOrderPortal: () => void;
   sellerPhone: string;
+  storeName?: string;
+  logoUrl?: string;
 }
 
-export default function Navbar({ cart, onOpenCart, isAdmin, onToggleAdmin, onOpenOrderPortal, sellerPhone }: NavbarProps) {
+export default function Navbar({ cart, onOpenCart, isAdmin, onToggleAdmin, onOpenOrderPortal, sellerPhone, storeName, logoUrl }: NavbarProps) {
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [pinCode, setPinCode] = useState('');
   const [errorPin, setErrorPin] = useState('');
@@ -42,9 +44,19 @@ export default function Navbar({ cart, onOpenCart, isAdmin, onToggleAdmin, onOpe
         <div className="flex items-center justify-between h-16">
           {/* Logo & Brand */}
           <div className="flex items-center gap-3">
-            <span className="font-display font-black text-2xl tracking-tighter text-[#0052FF] select-none uppercase">
-              Univers Shop
-            </span>
+            {logoUrl ? (
+              <img 
+                src={logoUrl} 
+                alt={storeName || "Univers Shop"} 
+                className="h-10 w-auto object-contain max-w-[160px] cursor-pointer"
+                onClick={() => window.location.reload()}
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <span className="font-display font-black text-2xl tracking-tighter text-[#0052FF] select-none uppercase">
+                {storeName || "Univers Shop"}
+              </span>
+            )}
             <div className="hidden sm:flex items-center gap-1 text-[10px] uppercase font-bold text-[#059669] bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100/50">
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>Garantie Sécurisée</span>

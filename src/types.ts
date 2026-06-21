@@ -49,3 +49,9 @@ export interface Wilaya {
   name: string;
   shippingFee: number;
 }
+
+export interface StoreSettings {
+  storeName: string;
+  logoUrl: string;
+  sellerPhone: string;
+}

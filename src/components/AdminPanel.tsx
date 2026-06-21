@@ -19,7 +19,7 @@ import {
   Phone,
   Upload
 } from 'lucide-react';
-import { Product, Order, PaymentMethod } from '../types';
+import { Product, Order, PaymentMethod, StoreSettings } from '../types';
 
 interface AdminPanelProps {
   products: Product[];
@@ -31,6 +31,8 @@ interface AdminPanelProps {
   onUpdatePaymentStatus: (orderId: string, status: Order['paymentStatus']) => void;
   onUpdateOrderFields?: (orderId: string, fields: Partial<Order>) => void;
   sellerPhone: string;
+  storeSettings?: StoreSettings;
+  onUpdateSettings?: (settings: StoreSettings) => void;
 }
 
 const STOCK_IMAGE_PRESETS = [
@@ -53,9 +55,86 @@ export default function AdminPanel({
   onUpdateOrderStatus,
   onUpdatePaymentStatus,
   onUpdateOrderFields,
-  sellerPhone
+  sellerPhone,
+  storeSettings,
+  onUpdateSettings
 }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'dashboard'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'dashboard' | 'settings'>('dashboard');
+
+  // Store general settings form states
+  const [localStoreName, setLocalStoreName] = useState(storeSettings?.storeName || 'Univers Shop');
+  const [localLogoUrl, setLocalLogoUrl] = useState(storeSettings?.logoUrl || '/logo_univers_shop.jpg');
+  const [localSellerPhone, setLocalSellerPhone] = useState(storeSettings?.sellerPhone || sellerPhone);
+  const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
+
+  React.useEffect(() => {
+    if (storeSettings) {
+      setLocalStoreName(storeSettings.storeName);
+      setLocalLogoUrl(storeSettings.logoUrl);
+      setLocalSellerPhone(storeSettings.sellerPhone);
+    }
+  }, [storeSettings]);
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // Limit logo size to max 280px width/height while keeping aspect ratio
+          const MAX_SIZE = 280;
+          if (width > height) {
+            if (width > MAX_SIZE) {
+              height = Math.round((height * MAX_SIZE) / width);
+              width = MAX_SIZE;
+            }
+          } else {
+            if (height > MAX_SIZE) {
+              width = Math.round((width * MAX_SIZE) / height);
+              height = MAX_SIZE;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            // Compress as PNG to preserve transparency and keep it ultra lightweight (< 20KB)
+            const compressed = canvas.toDataURL('image/png');
+            setLocalLogoUrl(compressed);
+          }
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onUpdateSettings) return;
+    setIsUpdatingSettings(true);
+    try {
+      await onUpdateSettings({
+        storeName: localStoreName,
+        logoUrl: localLogoUrl,
+        sellerPhone: localSellerPhone
+      });
+      alert('Paramètres de la boutique mis à jour avec succès !');
+    } catch (err) {
+      console.error(err);
+      alert('Erreur lors de la mise à jour des paramètres.');
+    } finally {
+      setIsUpdatingSettings(false);
+    }
+  };
 
   // Add/Edit product form states
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -227,6 +306,12 @@ export default function AdminPanel({
             className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer  ${activeTab === 'orders' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
           >
             Dossier Commandes ({orders.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer  ${activeTab === 'settings' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+          >
+            ⚙️ Paramètres
           </button>
         </div>
       </div>
@@ -897,6 +982,173 @@ export default function AdminPanel({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* CASE 4: SHOP SETTINGS TAB */}
+      {activeTab === 'settings' && (
+        <div className="space-y-8 animate-fade-in max-w-3xl mx-auto">
+          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs relative overflow-hidden">
+            <div className="flex items-center gap-3 mb-2 border-b border-slate-100 pb-4">
+              <span className="p-2.5 bg-sky-50 text-[#0052FF] rounded-2xl text-lg">⚙️</span>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Profil & Identité de la Boutique</h3>
+                <p className="text-slate-500 text-xs mt-0.5">
+                  Personnalisez le logo, le nom du site et le numéro de téléphone officiel d'assistance.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveSettings} className="space-y-6 pt-4">
+              {/* Store Name input */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Nom de la Boutique
+                </label>
+                <input
+                  type="text"
+                  value={localStoreName}
+                  onChange={(e) => setLocalStoreName(e.target.value)}
+                  className="w-full text-sm font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#0052FF] transition-all"
+                  placeholder="Ex: Univers Shop"
+                  required
+                />
+              </div>
+
+              {/* Secure Phone contact */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Numéro de Téléphone (WhatsApp & Appels direct)
+                </label>
+                <input
+                  type="text"
+                  value={localSellerPhone}
+                  onChange={(e) => setLocalSellerPhone(e.target.value)}
+                  className="w-full text-sm font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#0052FF] transition-all"
+                  placeholder="Ex: 0558926754"
+                  required
+                />
+                <p className="text-[10px] text-slate-400">
+                  Ce numéro est affiché sur le bandeau supérieur, les boutons d'appel direct, la page de caisse sécurisée et le portail de suivi des colis.
+                </p>
+              </div>
+
+              {/* Logo Settings */}
+              <div className="space-y-4 border-t border-slate-100 pt-6">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Logo Web Universel (Image ou Texte)
+                </label>
+
+                {/* Live Header Logo Preview */}
+                <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col items-center justify-center gap-3">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Aperçu en Direct du Header</span>
+                  <div className="h-16 flex items-center justify-center px-8 bg-white border border-slate-100 rounded-2xl w-full max-w-sm shadow-xs">
+                    {localLogoUrl ? (
+                      <img 
+                        src={localLogoUrl} 
+                        alt="Logo Preview" 
+                        className="h-10 w-auto object-contain max-w-[170px]" 
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <span className="font-display font-black text-2xl tracking-tighter text-[#0052FF] uppercase">
+                        {localStoreName || "Univers Shop"}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-500">
+                    {localLogoUrl ? "🎨 Logo Image (Importé / Lien externe) activé" : "📝 Mode Texte (Logo en texte automatique) activé"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Upload option */}
+                  <div className="p-4 border border-dashed border-slate-200 bg-slate-50/25 hover:bg-slate-50/50 rounded-2xl flex flex-col justify-between space-y-4 transition-all col-span-1">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <Upload className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Importer une image de logo</span>
+                      </h4>
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        Sélectionnez une image de logo moderne (conseillé sur fond blanc / transparent).
+                      </p>
+                    </div>
+                    
+                    <label className="flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-2.5 px-4 rounded-xl cursor-pointer transition-all hover:scale-[1.01] active:scale-95 text-center">
+                      <Camera className="w-4 h-4" />
+                      <span>Choisir une image...</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={handleLogoUpload}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Remote URL input */}
+                  <div className="p-4 border border-slate-200 bg-slate-50/25 rounded-2xl flex flex-col justify-between space-y-4 col-span-1">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <Eye className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Saisir une adresse URL d'image</span>
+                      </h4>
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        Vous pouvez coller l'URL directe d'une image stockée en ligne.
+                      </p>
+                    </div>
+
+                    <input
+                      type="text"
+                      value={localLogoUrl}
+                      onChange={(e) => setLocalLogoUrl(e.target.value)}
+                      className="w-full text-xs font-mono text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-[#0052FF]"
+                      placeholder="https://example.com/images/mon-logo.png"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-4 mt-2">
+                  {localLogoUrl !== '/logo_univers_shop.jpg' && (
+                    <button
+                      type="button"
+                      onClick={() => setLocalLogoUrl('/logo_univers_shop.jpg')}
+                      className="text-xs font-bold text-[#0052FF] hover:text-[#003BCC] flex items-center gap-1.5 transition-all cursor-pointer bg-blue-50 hover:bg-blue-100/80 px-3 py-1.5 rounded-lg"
+                    >
+                      🔄 Utiliser le logo officiel (/logo_univers_shop.jpg)
+                    </button>
+                  )}
+                  {localLogoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setLocalLogoUrl('')}
+                      className="text-xs font-bold text-rose-500 hover:text-rose-600 flex items-center gap-1.5 transition-all cursor-pointer bg-rose-50 hover:bg-rose-100/80 px-3 py-1.5 rounded-lg"
+                    >
+                      🗑 Désactiver l'image (Repasser en texte)
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Submit Button */}
+              <div className="border-t border-slate-100 pt-6 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={isUpdatingSettings}
+                  className="bg-[#0052FF] hover:bg-[#003BCC] text-white font-bold text-xs px-6 py-3 rounded-xl disabled:opacity-50 cursor-pointer flex items-center gap-2 shadow-md shadow-[#0052FF]/10 transition-all hover:scale-[1.02] active:scale-95"
+                >
+                  {isUpdatingSettings ? (
+                    <span>Enregistrement...</span>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Enregistrer les modifications</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
