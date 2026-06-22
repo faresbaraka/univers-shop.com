@@ -26,6 +26,11 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
             Presque épuisé
           </span>
         )}
+        {product.originalPrice && product.originalPrice > product.price && (
+          <span className="bg-red-600/95 backdrop-blur-md text-white text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-0.5 animate-pulse">
+            Promo -{Math.round((1 - product.price / product.originalPrice) * 100)}%
+          </span>
+        )}
       </div>
 
       {/* SSL badge over product for trust */}
@@ -64,9 +69,16 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
         <div className="mt-auto pt-4 flex items-center justify-between border-t border-slate-50">
           <div className="flex flex-col">
             <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Prix</span>
-            <span className="text-xl font-display font-extrabold text-slate-900">
-              {product.price.toLocaleString('fr-DZ')} <span className="text-xs font-semibold text-sky-600 ml-0.5">DA</span>
-            </span>
+            <div className="flex flex-col">
+              <span className={`text-xl font-display font-extrabold ${product.originalPrice && product.originalPrice > product.price ? 'text-red-600' : 'text-slate-900'}`}>
+                {product.price.toLocaleString('fr-DZ')} <span className="text-xs font-semibold text-sky-600 ml-0.5">DA</span>
+              </span>
+              {product.originalPrice && product.originalPrice > product.price && (
+                <span className="text-[11px] text-slate-400 line-through font-mono">
+                  {product.originalPrice.toLocaleString('fr-DZ')} DA
+                </span>
+              )}
+            </div>
           </div>
 
           <button

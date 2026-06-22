@@ -65,6 +65,12 @@ export default function AdminPanel({
   const [localStoreName, setLocalStoreName] = useState(storeSettings?.storeName || 'Univers Shop');
   const [localLogoUrl, setLocalLogoUrl] = useState(storeSettings?.logoUrl || '/logo_univers_shop.jpg');
   const [localSellerPhone, setLocalSellerPhone] = useState(storeSettings?.sellerPhone || sellerPhone);
+  const [localPromoBannerActive, setLocalPromoBannerActive] = useState(storeSettings?.promoBannerActive || false);
+  const [localPromoBannerText, setLocalPromoBannerText] = useState(storeSettings?.promoBannerText || '');
+  const [localPromoCodeActive, setLocalPromoCodeActive] = useState(storeSettings?.promoCodeActive || false);
+  const [localPromoCode, setLocalPromoCode] = useState(storeSettings?.promoCode || '');
+  const [localPromoDiscountType, setLocalPromoDiscountType] = useState<'percentage' | 'fixed'>(storeSettings?.promoDiscountType || 'percentage');
+  const [localPromoDiscountValue, setLocalPromoDiscountValue] = useState(storeSettings?.promoDiscountValue?.toString() || '');
   const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
 
   React.useEffect(() => {
@@ -72,6 +78,12 @@ export default function AdminPanel({
       setLocalStoreName(storeSettings.storeName);
       setLocalLogoUrl(storeSettings.logoUrl);
       setLocalSellerPhone(storeSettings.sellerPhone);
+      setLocalPromoBannerActive(storeSettings.promoBannerActive || false);
+      setLocalPromoBannerText(storeSettings.promoBannerText || '');
+      setLocalPromoCodeActive(storeSettings.promoCodeActive || false);
+      setLocalPromoCode(storeSettings.promoCode || '');
+      setLocalPromoDiscountType(storeSettings.promoDiscountType || 'percentage');
+      setLocalPromoDiscountValue(storeSettings.promoDiscountValue?.toString() || '');
     }
   }, [storeSettings]);
 
@@ -125,7 +137,13 @@ export default function AdminPanel({
       await onUpdateSettings({
         storeName: localStoreName,
         logoUrl: localLogoUrl,
-        sellerPhone: localSellerPhone
+        sellerPhone: localSellerPhone,
+        promoBannerActive: localPromoBannerActive,
+        promoBannerText: localPromoBannerText,
+        promoCodeActive: localPromoCodeActive,
+        promoCode: localPromoCode.trim(),
+        promoDiscountType: localPromoDiscountType,
+        promoDiscountValue: localPromoDiscountValue ? Number(localPromoDiscountValue) : undefined
       });
       alert('Paramètres de la boutique mis à jour avec succès !');
     } catch (err) {
@@ -142,6 +160,7 @@ export default function AdminPanel({
   
   const [prodName, setProdName] = useState('');
   const [prodPrice, setProdPrice] = useState('');
+  const [prodOriginalPrice, setProdOriginalPrice] = useState('');
   const [prodCategory, setProdCategory] = useState('Électronique');
   const [prodDescription, setProdDescription] = useState('');
   const [prodStock, setProdStock] = useState('10');
@@ -183,6 +202,7 @@ export default function AdminPanel({
     onAddProduct({
       name: prodName,
       price: Number(prodPrice),
+      originalPrice: prodOriginalPrice ? Number(prodOriginalPrice) : undefined,
       category: prodCategory,
       description: prodDescription,
       stock: Number(prodStock) || 0,
@@ -192,6 +212,7 @@ export default function AdminPanel({
     // Reset Form
     setProdName('');
     setProdPrice('');
+    setProdOriginalPrice('');
     setProdDescription('');
     setProdStock('10');
     setProdImageUrl(STOCK_IMAGE_PRESETS[0].url);
@@ -202,6 +223,7 @@ export default function AdminPanel({
     setEditingProduct(product);
     setProdName(product.name);
     setProdPrice(product.price.toString());
+    setProdOriginalPrice(product.originalPrice ? product.originalPrice.toString() : '');
     setProdCategory(product.category);
     setProdDescription(product.description);
     setProdStock(product.stock.toString());
@@ -216,6 +238,7 @@ export default function AdminPanel({
       ...editingProduct,
       name: prodName,
       price: Number(prodPrice),
+      originalPrice: prodOriginalPrice ? Number(prodOriginalPrice) : undefined,
       category: prodCategory,
       description: prodDescription,
       stock: Number(prodStock),
@@ -226,6 +249,7 @@ export default function AdminPanel({
     // Reset Form
     setProdName('');
     setProdPrice('');
+    setProdOriginalPrice('');
     setProdDescription('');
     setProdStock('10');
     setProdImageUrl(STOCK_IMAGE_PRESETS[0].url);
@@ -237,6 +261,7 @@ export default function AdminPanel({
     // Reset fields
     setProdName('');
     setProdPrice('');
+    setProdOriginalPrice('');
     setProdDescription('');
     setProdStock('10');
     setProdImageUrl(STOCK_IMAGE_PRESETS[0].url);
@@ -489,7 +514,7 @@ export default function AdminPanel({
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-xs font-semibold text-slate-600 mb-1.5">Prix de vente en DA *</label>
                         <input
@@ -499,6 +524,17 @@ export default function AdminPanel({
                           onChange={(e) => setProdPrice(e.target.value)}
                           className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 font-mono font-bold"
                           required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">Prix avant promo (Optionnel)</label>
+                        <input
+                          type="number"
+                          placeholder="Ex: 65000"
+                          value={prodOriginalPrice}
+                          onChange={(e) => setProdOriginalPrice(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 font-mono text-slate-500 font-bold"
                         />
                       </div>
 
@@ -688,8 +724,17 @@ export default function AdminPanel({
                             {product.category}
                           </span>
                         </td>
-                        <td className="py-4 px-3 text-right font-bold text-slate-900 font-mono text-sm">
-                          {product.price.toLocaleString('fr-DZ')} DA
+                        <td className="py-4 px-3 text-right">
+                          <div className="flex flex-col items-end">
+                            <span className="font-bold text-slate-900 font-mono text-sm">
+                              {product.price.toLocaleString('fr-DZ')} DA
+                            </span>
+                            {product.originalPrice && product.originalPrice > product.price && (
+                              <span className="text-[10px] text-red-500 font-semibold line-through font-mono">
+                                {product.originalPrice.toLocaleString('fr-DZ')} DA
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-4 px-3 text-center font-mono font-medium">
                           {product.stock <= 0 ? (
@@ -1031,6 +1076,105 @@ export default function AdminPanel({
                 <p className="text-[10px] text-slate-400">
                   Ce numéro est affiché sur le bandeau supérieur, les boutons d'appel direct, la page de caisse sécurisée et le portail de suivi des colis.
                 </p>
+              </div>
+
+              {/* Promotion Banner Configuration */}
+              <div className="space-y-4 border-t border-slate-100 pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Bannière d'Annonce / Promotionnelle
+                    </label>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Affiche un message défilant ou fixe en haut du site pour capter l'attention des clients.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={localPromoBannerActive} 
+                      onChange={(e) => setLocalPromoBannerActive(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#0052FF]"></div>
+                  </label>
+                </div>
+
+                {localPromoBannerActive && (
+                  <div className="space-y-2 animate-fade-in animate-duration-200">
+                    <input
+                      type="text"
+                      value={localPromoBannerText}
+                      onChange={(e) => setLocalPromoBannerText(e.target.value)}
+                      className="w-full text-xs font-medium text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500/10 focus:border-[#0052FF] transition-all"
+                      placeholder="Ex: 🔥 Livraison Gratuite (Alger) pour toute commande supérieure à 10000 DA !"
+                      required={localPromoBannerActive}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Promo Coupon Configuration */}
+              <div className="space-y-4 border-t border-slate-100 pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Code de Réduction / Coupon Promo
+                    </label>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Permet aux clients d'appliquer un code de réduction lors du paiement.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={localPromoCodeActive} 
+                      onChange={(e) => setLocalPromoCodeActive(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#0052FF]"></div>
+                  </label>
+                </div>
+
+                {localPromoCodeActive && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 animate-fade-in p-4 bg-slate-50/50 rounded-xl border border-slate-100">
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide">Mots Clés du Code</label>
+                      <input
+                        type="text"
+                        value={localPromoCode}
+                        onChange={(e) => setLocalPromoCode(e.target.value.toUpperCase())}
+                        className="w-full text-xs font-bold text-slate-800 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500/15 focus:border-[#0052FF] font-mono uppercase"
+                        placeholder="Ex: PROMO20, DZ2026"
+                        required={localPromoCodeActive}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide">Type de Remise</label>
+                      <select
+                        value={localPromoDiscountType}
+                        onChange={(e) => setLocalPromoDiscountType(e.target.value as 'percentage' | 'fixed')}
+                        className="w-full text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500/15 focus:border-[#0052FF]"
+                      >
+                        <option value="percentage">Pourcentage (%)</option>
+                        <option value="fixed">Montant Fixe (DA)</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide">Valeur de la Remise</label>
+                      <input
+                        type="number"
+                        value={localPromoDiscountValue}
+                        onChange={(e) => setLocalPromoDiscountValue(e.target.value)}
+                        className="w-full text-xs font-bold text-slate-800 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500/15 focus:border-[#0052FF] font-mono"
+                        placeholder={localPromoDiscountType === 'percentage' ? "Ex: 15 (pour -15%)" : "Ex: 1000 (pour -1000 DA)"}
+                        required={localPromoCodeActive}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Logo Settings */}

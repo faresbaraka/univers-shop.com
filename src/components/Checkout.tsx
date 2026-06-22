@@ -15,7 +15,7 @@ import {
   TrendingUp, 
   AlertCircle 
 } from 'lucide-react';
-import { CartItem, PaymentMethod, Order } from '../types';
+import { CartItem, PaymentMethod, Order, StoreSettings } from '../types';
 import { ALGERIAN_WILAYAS } from '../data/mockProducts';
 
 interface CheckoutProps {
@@ -24,15 +24,22 @@ interface CheckoutProps {
   onClose: () => void;
   onOrderSuccess: (order: Order) => void;
   sellerPhone: string;
+  storeSettings?: StoreSettings;
 }
 
-export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, sellerPhone }: CheckoutProps) {
+export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, sellerPhone, storeSettings }: CheckoutProps) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1); // 1: Info, 2: Payment, 3: Secure3D_OTP (for card), 4: Ticket
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [selectedWilayaCode, setSelectedWilayaCode] = useState<number>(16); // Alger default
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('delivery');
+
+  // Coupon promo states
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedPromoCode, setAppliedPromoCode] = useState('');
+  const [promoError, setPromoError] = useState('');
+  const [promoSuccessMsg, setPromoSuccessMsg] = useState('');
 
   // Card details state
   const [cardNumber, setCardNumber] = useState('');
@@ -61,7 +68,23 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
 
   const selectedWilaya = ALGERIAN_WILAYAS.find(w => w.code === selectedWilayaCode) || ALGERIAN_WILAYAS[15]; // default Alger
   const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-  const totalAmount = subtotal + selectedWilaya.shippingFee;
+
+  // Dynamically calculate discount
+  const getDiscountDeduction = () => {
+    if (!appliedPromoCode || !storeSettings || !storeSettings.promoCodeActive) return 0;
+    if (appliedPromoCode.trim().toUpperCase() !== storeSettings.promoCode?.trim().toUpperCase()) return 0;
+
+    if (storeSettings.promoDiscountType === 'percentage') {
+      const percentage = storeSettings.promoDiscountValue || 0;
+      return Math.round((subtotal * percentage) / 100);
+    } else {
+      const fixedValue = storeSettings.promoDiscountValue || 0;
+      return Math.min(fixedValue, subtotal);
+    }
+  };
+
+  const discountDeduction = getDiscountDeduction();
+  const totalAmount = Math.max(0, subtotal - discountDeduction) + selectedWilaya.shippingFee;
 
   // Fetch state configuration from secure proxy backend
   useEffect(() => {
@@ -198,6 +221,30 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
     }
   };
 
+  const handleApplyCoupon = () => {
+    setPromoError('');
+    setPromoSuccessMsg('');
+    
+    if (!couponInput.trim()) {
+      setPromoError('Veuillez entrer un code promo.');
+      return;
+    }
+    
+    if (!storeSettings || !storeSettings.promoCodeActive || !storeSettings.promoCode) {
+      setPromoError('Aucun code promo actif pour le moment.');
+      return;
+    }
+    
+    if (couponInput.trim().toUpperCase() === storeSettings.promoCode.trim().toUpperCase()) {
+      setAppliedPromoCode(couponInput.trim().toUpperCase());
+      const value = storeSettings.promoDiscountValue || 0;
+      const desc = storeSettings.promoDiscountType === 'percentage' ? `-${value}%` : `-${value.toLocaleString('fr-DZ')} DA`;
+      setPromoSuccessMsg(`Code promo "${storeSettings.promoCode}" validé avec succès (${desc}) !`);
+    } else {
+      setPromoError('Code promo invalide. Veuillez réessayer.');
+    }
+  };
+
   const handleOtpVerify = () => {
     if (enteredOtp === otpCode) {
       submitFinalOrder();
@@ -224,6 +271,8 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
         quantity: item.quantity
       })),
       totalAmount: totalAmount,
+      discountAmount: discountDeduction > 0 ? discountDeduction : undefined,
+      promoCodeApplied: appliedPromoCode ? appliedPromoCode : undefined,
       paymentMethod: paymentMethod,
       paymentStatus: paymentMethod === 'delivery' ? 'pending' : (useRealChargily ? 'pending' : 'verified'),
       orderStatus: 'received',
@@ -396,6 +445,35 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
                   🔒 Vos données personnelles sont hautement sécurisées par notre protocole d'encryptage propriétaire d'Univers Shop. Nous vérifions toutes les adresses par appel au <b>{sellerPhone}</b> avant expédition.
                 </p>
               </div>
+
+              {/* Optional Code Promo Coupon fields */}
+              {storeSettings?.promoCodeActive && (
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3 mt-4">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Avez-vous un Code de Réduction / Promo ?</span>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="Ex: PROMO20"
+                      value={couponInput}
+                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                      className="flex-grow bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-sky-500 font-bold uppercase"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleApplyCoupon}
+                      className="bg-slate-900 text-white font-bold text-xs px-4 py-2 rounded-xl hover:bg-sky-650 transition-colors cursor-pointer"
+                    >
+                      Appliquer
+                    </button>
+                  </div>
+                  {promoError && (
+                    <p className="text-rose-500 text-[10px] font-bold mt-1 bg-rose-50 px-2 py-1 rounded border border-rose-100">{promoError}</p>
+                  )}
+                  {promoSuccessMsg && (
+                    <p className="text-emerald-600 text-[10px] font-bold mt-1 bg-emerald-50 px-2 py-1 rounded border border-emerald-100">{promoSuccessMsg}</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -782,6 +860,12 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
                       <span>Frais d'expédition ({orderReceipt.customerWilaya})</span>
                       <span>{(selectedWilaya.shippingFee).toLocaleString()} DA</span>
                     </div>
+                    {orderReceipt.discountAmount && (
+                      <div className="flex justify-between text-xs text-rose-600 font-bold pt-1">
+                        <span>Réduction Code Promo ({orderReceipt.promoCodeApplied}) :</span>
+                        <span>-{orderReceipt.discountAmount.toLocaleString('fr-DZ')} DA</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-150">
@@ -832,6 +916,12 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
                 <span>Sous-total articles :</span>
                 <span className="font-semibold text-slate-900">{subtotal.toLocaleString('fr-DZ')} DA</span>
               </div>
+              {discountDeduction > 0 && (
+                <div className="flex justify-between text-rose-600 font-bold">
+                  <span>Réduction Code Promo ({appliedPromoCode}) :</span>
+                  <span>-{discountDeduction.toLocaleString('fr-DZ')} DA</span>
+                </div>
+              )}
               <div className="flex justify-between text-slate-500 font-medium">
                 <span>Livraison ({selectedWilaya.name}) :</span>
                 <span className="font-semibold text-slate-900">{selectedWilaya.shippingFee.toLocaleString()} DA</span>

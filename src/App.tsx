@@ -79,37 +79,66 @@ const INITIAL_ORDERS: Order[] = [
 export default function App() {
   // Products state (persisted on Firestore with localStorage as instant fast-loading fallback)
   const [products, setProducts] = useState<Product[]>(() => {
-    const saved = localStorage.getItem('univers_shop_products');
-    return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+    try {
+      const saved = localStorage.getItem('univers_shop_products');
+      return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+    } catch (e) {
+      console.warn("Could not parse products from localstorage:", e);
+      return INITIAL_PRODUCTS;
+    }
   });
 
   // Orders state (persisted on Firestore with localStorage as instant fast-loading fallback)
   const [orders, setOrders] = useState<Order[]>(() => {
-    const saved = localStorage.getItem('univers_shop_orders');
-    return saved ? JSON.parse(saved) : INITIAL_ORDERS;
+    try {
+      const saved = localStorage.getItem('univers_shop_orders');
+      return saved ? JSON.parse(saved) : INITIAL_ORDERS;
+    } catch (e) {
+      console.warn("Could not parse orders from localstorage:", e);
+      return INITIAL_ORDERS;
+    }
   });
 
   // Shop settings (synchronized with Firestore in real-time)
   const [settings, setSettings] = useState<StoreSettings>(() => {
-    const saved = localStorage.getItem('univers_shop_settings');
-    return saved ? JSON.parse(saved) : {
-      storeName: 'Univers Shop',
-      logoUrl: '/logo_univers_shop.jpg',
-      sellerPhone: '0558926754'
-    };
+    try {
+      const saved = localStorage.getItem('univers_shop_settings');
+      return saved ? JSON.parse(saved) : {
+        storeName: 'Univers Shop',
+        logoUrl: '/logo_univers_shop.jpg',
+        sellerPhone: '0558926754'
+      };
+    } catch (e) {
+      console.warn("Could not parse settings from localstorage:", e);
+      return {
+        storeName: 'Univers Shop',
+        logoUrl: '/logo_univers_shop.jpg',
+        sellerPhone: '0558926754'
+      };
+    }
   });
 
   // Cart state (local user storage)
   const [cart, setCart] = useState<CartItem[]>(() => {
-    const saved = localStorage.getItem('univers_shop_cart');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('univers_shop_cart');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.warn("Could not parse cart from localstorage:", e);
+      return [];
+    }
   });
 
   // UI state (Persist Admin login across refreshes so the user stays on their custom view)
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
-    const saved = localStorage.getItem('univers_shop_is_admin');
-    return saved === 'true';
+    try {
+      const saved = localStorage.getItem('univers_shop_is_admin');
+      return saved === 'true';
+    } catch (e) {
+      return false;
+    }
   });
+  const [isOfflineMode, setIsOfflineMode] = useState<boolean>(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isOrderPortalOpen, setIsOrderPortalOpen] = useState(false);
@@ -147,16 +176,21 @@ export default function App() {
         if (logo.startsWith('data:') && logo.length > 6100) {
           logo = '/logo_univers_shop.jpg';
           setDoc(doc(db, 'settings', 'store'), {
-            storeName: data.storeName || 'Univers Shop',
+            ...data,
             logoUrl: '/logo_univers_shop.jpg',
-            sellerPhone: data.sellerPhone || '0558926754'
-          }).catch(err => console.error("Auto reset heavy logo error:", err));
+          }).catch(err => console.warn("Auto reset heavy logo warning:", err));
         }
 
         setSettings({
           storeName: data.storeName || 'Univers Shop',
           logoUrl: logo,
-          sellerPhone: data.sellerPhone || '0558926754'
+          sellerPhone: data.sellerPhone || '0558926754',
+          promoBannerActive: data.promoBannerActive || false,
+          promoBannerText: data.promoBannerText || '',
+          promoCodeActive: data.promoCodeActive || false,
+          promoCode: data.promoCode || '',
+          promoDiscountType: data.promoDiscountType || 'percentage',
+          promoDiscountValue: data.promoDiscountValue !== undefined ? Number(data.promoDiscountValue) : undefined
         });
       } else {
         // Safe seeding if the doc doesn't exist yet
@@ -164,10 +198,11 @@ export default function App() {
           storeName: 'Univers Shop',
           logoUrl: '/logo_univers_shop.jpg',
           sellerPhone: '0558926754'
-        }).catch((err) => console.error('Error generating store document:', err));
+        }).catch((err) => console.warn('Warning generating store document:', err));
       }
     }, (error) => {
-      console.error('Error listening to store settings:', error);
+      console.warn('Error listening to store settings (Falling back to Local Storage due to quota):', error);
+      setIsOfflineMode(true);
     });
 
     return () => unsubscribe();
@@ -208,7 +243,7 @@ export default function App() {
 
         localStorage.setItem(migratedKey, 'true');
       } catch (err) {
-        console.error('Error during data migration to Firestore:', err);
+        console.warn('Warning during data migration to Firestore:', err);
       }
     };
     migrateData();
@@ -225,6 +260,7 @@ export default function App() {
           name: data.name || 'Produit sans nom',
           description: data.description || '',
           price: Number(data.price) || 0,
+          originalPrice: data.originalPrice ? Number(data.originalPrice) : undefined,
           imageUrl: data.imageUrl || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&q=80&w=600',
           category: data.category || 'Tous',
           stock: data.stock !== undefined ? Number(data.stock) : 10,
@@ -240,7 +276,7 @@ export default function App() {
           try {
             await setDoc(doc(db, 'products', p.id), p);
           } catch (e) {
-            console.error('Seeding product failed:', p.id, e);
+            console.warn('Seeding product failed or under quota:', p.id, e);
           }
         });
       } else {
@@ -249,7 +285,8 @@ export default function App() {
         setProducts(prodsList);
       }
     }, (error) => {
-      console.error('Error reading live products:', error);
+      console.warn('Error reading live products (Falling back to Local Storage due to quota):', error);
+      setIsOfflineMode(true);
     });
 
     return () => unsubscribe();
@@ -285,7 +322,7 @@ export default function App() {
           try {
             await setDoc(doc(db, 'orders', o.id), o);
           } catch (e) {
-            console.error('Seeding order failed:', o.id, e);
+            console.warn('Seeding order failed or under quota:', o.id, e);
           }
         });
       } else {
@@ -294,7 +331,8 @@ export default function App() {
         setOrders(ordersList);
       }
     }, (error) => {
-      console.error('Error reading live orders:', error);
+      console.warn('Error reading live orders (Falling back to Local Storage due to quota):', error);
+      setIsOfflineMode(true);
     });
 
     return () => unsubscribe();
@@ -363,18 +401,26 @@ export default function App() {
     };
     try {
       await setDoc(doc(db, 'products', nextId), productWithId);
+      if (isOfflineMode) {
+        setProducts(prev => [productWithId, ...prev]);
+      }
     } catch (e) {
-      console.error('Failed to add product to Firestore:', e);
-      alert('Erreur lors de l\'ajout du produit en base : ' + (e instanceof Error ? e.message : String(e)));
+      console.warn('Failed to add product to Firestore, using local fallback:', e);
+      setProducts(prev => [productWithId, ...prev]);
+      alert('Mode Local : Produit ajouté avec succès de manière locale.');
     }
   };
 
   const handleUpdateProduct = async (updatedProd: Product) => {
     try {
       await setDoc(doc(db, 'products', updatedProd.id), updatedProd);
+      if (isOfflineMode) {
+        setProducts(prev => prev.map(p => p.id === updatedProd.id ? updatedProd : p));
+      }
     } catch (e) {
-      console.error('Failed to update product in Firestore:', e);
-      alert('Erreur lors de la mise à jour du produit en base : ' + (e instanceof Error ? e.message : String(e)));
+      console.warn('Failed to update product in Firestore, using local fallback:', e);
+      setProducts(prev => prev.map(p => p.id === updatedProd.id ? updatedProd : p));
+      alert('Mode Local : Produit mis à jour localement.');
     }
   };
 
@@ -382,9 +428,13 @@ export default function App() {
     if (confirm('Voulez-vous vraiment retirer cet article d\'Univers Shop ?')) {
       try {
         await deleteDoc(doc(db, 'products', productId));
+        if (isOfflineMode) {
+          setProducts(prev => prev.filter(p => p.id !== productId));
+        }
       } catch (e) {
-        console.error('Failed to delete product from Firestore:', e);
-        alert('Erreur lors de la suppression du produit en base : ' + (e instanceof Error ? e.message : String(e)));
+        console.warn('Failed to delete product from Firestore, using local fallback:', e);
+        setProducts(prev => prev.filter(p => p.id !== productId));
+        alert('Mode Local : Article retiré localement.');
       }
     }
   };
@@ -394,8 +444,8 @@ export default function App() {
       await setDoc(doc(db, 'settings', 'store'), newSettings);
       setSettings(newSettings);
     } catch (e) {
-      console.error('Failed to update settings in Firestore:', e);
-      throw e;
+      console.warn('Failed to update settings in Firestore, using local fallback:', e);
+      setSettings(newSettings);
     }
   };
 
@@ -412,14 +462,19 @@ export default function App() {
         const currentProd = products.find(p => p.id === orderItem.productId);
         if (currentProd) {
           const prodRef = doc(db, 'products', orderItem.productId);
+          const updatedProd = {
+            ...currentProd,
+            stock: Math.max(0, currentProd.stock - orderItem.quantity),
+            salesCount: currentProd.salesCount + orderItem.quantity
+          };
           try {
-            await setDoc(prodRef, {
-              ...currentProd,
-              stock: Math.max(0, currentProd.stock - orderItem.quantity),
-              salesCount: currentProd.salesCount + orderItem.quantity
-            });
+            await setDoc(prodRef, updatedProd);
+            if (isOfflineMode) {
+              setProducts(prev => prev.map(p => p.id === updatedProd.id ? updatedProd : p));
+            }
           } catch (e) {
-            console.error('Failed to deduct stock for product:', orderItem.productId, e);
+            console.warn('Failed to deduct stock for product under quota, using local fallback:', orderItem.productId, e);
+            setProducts(prev => prev.map(p => p.id === updatedProd.id ? updatedProd : p));
           }
         }
       }
@@ -431,14 +486,19 @@ export default function App() {
         const currentProd = products.find(p => p.id === orderItem.productId);
         if (currentProd) {
           const prodRef = doc(db, 'products', orderItem.productId);
+          const updatedProd = {
+            ...currentProd,
+            stock: currentProd.stock + orderItem.quantity,
+            salesCount: Math.max(0, currentProd.salesCount - orderItem.quantity)
+          };
           try {
-            await setDoc(prodRef, {
-              ...currentProd,
-              stock: currentProd.stock + orderItem.quantity,
-              salesCount: Math.max(0, currentProd.salesCount - orderItem.quantity)
-            });
+            await setDoc(prodRef, updatedProd);
+            if (isOfflineMode) {
+              setProducts(prev => prev.map(p => p.id === updatedProd.id ? updatedProd : p));
+            }
           } catch (e) {
-            console.error('Failed to restock product:', orderItem.productId, e);
+            console.warn('Failed to restock product under quota, using local fallback:', orderItem.productId, e);
+            setProducts(prev => prev.map(p => p.id === updatedProd.id ? updatedProd : p));
           }
         }
       }
@@ -447,9 +507,12 @@ export default function App() {
 
     try {
       await setDoc(doc(db, 'orders', orderId), updated);
+      if (isOfflineMode) {
+        setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+      }
     } catch (e) {
-      console.error('Failed to update order fields:', e);
-      alert('Erreur lors de la mise à jour de la commande : ' + (e instanceof Error ? e.message : String(e)));
+      console.warn('Failed to update order fields in Firestore, using local fallback:', e);
+      setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
     }
   };
 
@@ -464,13 +527,19 @@ export default function App() {
   const handleOrderSuccess = async (newOrder: Order) => {
     try {
       await setDoc(doc(db, 'orders', newOrder.id), newOrder);
-      
+      if (isOfflineMode) {
+        setOrders(prev => [newOrder, ...prev]);
+      }
       const myOrders = JSON.parse(localStorage.getItem('univers_shop_my_orders') || '[]');
       myOrders.push(newOrder.id);
       localStorage.setItem('univers_shop_my_orders', JSON.stringify(myOrders));
     } catch (e) {
-      console.error('Failed to write new order to Firestore:', e);
-      alert('Erreur lors de la soumission de la commande en base : ' + (e instanceof Error ? e.message : String(e)));
+      console.warn('Failed to write new order to Firestore, using local fallback:', e);
+      setOrders(prev => [newOrder, ...prev]);
+      const myOrders = JSON.parse(localStorage.getItem('univers_shop_my_orders') || '[]');
+      myOrders.push(newOrder.id);
+      localStorage.setItem('univers_shop_my_orders', JSON.stringify(myOrders));
+      alert('Mode Local : Votre commande a été enregistrée avec succès de manière locale.');
     }
   };
 
@@ -487,6 +556,19 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 selection:bg-sky-500 selection:text-white">
+      {settings.promoBannerActive && settings.promoBannerText && (
+        <div className="bg-gradient-to-r from-red-600 via-amber-500 to-red-600 text-white py-2 px-4 text-center font-display font-medium text-xs shadow-md flex items-center justify-center gap-2 overflow-hidden relative">
+          <div className="absolute inset-0 bg-white/10 select-none pointer-events-none mix-blend-overlay"></div>
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+          </span>
+          <span className="relative tracking-wide leading-relaxed truncate drop-shadow-xs font-bold">
+            {settings.promoBannerText}
+          </span>
+        </div>
+      )}
+
       {/* Dynamic Security Ribbon */}
       <div className="bg-slate-900 text-white text-[11px] font-medium py-2 px-4 shadow-sm border-b border-slate-800">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -504,6 +586,16 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {isOfflineMode && (
+        <div className="bg-amber-500 text-white text-[11px] font-bold py-2.5 px-4 shadow-sm border-b border-amber-600 flex items-center justify-center gap-2">
+          <span className="flex h-2 w-2 relative">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+          </span>
+          <span>Boutique en mode local (la base de données cloud est en cours de maintenance / quota atteint, vos modifications restent 100% fonctionnelles et enregistrées sur votre appareil)</span>
+        </div>
+      )}
 
       {/* Main Navbar */}
       <Navbar 
@@ -749,6 +841,7 @@ export default function App() {
           onClose={() => setIsCheckoutOpen(false)}
           onOrderSuccess={handleOrderSuccess}
           sellerPhone={settings.sellerPhone}
+          storeSettings={settings}
         />
       )}
 

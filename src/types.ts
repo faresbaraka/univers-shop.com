@@ -3,6 +3,7 @@ export interface Product {
   name: string;
   description: string;
   price: number; // in DZD (DA)
+  originalPrice?: number; // in DZD (DA) - before promotion
   imageUrl: string;
   category: string;
   stock: number;
@@ -31,6 +32,8 @@ export interface Order {
     quantity: number;
   }[];
   totalAmount: number;
+  discountAmount?: number;
+  promoCodeApplied?: string;
   paymentMethod: PaymentMethod;
   paymentStatus: 'pending' | 'verified' | 'failed';
   orderStatus: 'received' | 'processing' | 'shipped' | 'delivered' | 'returned';
@@ -54,4 +57,10 @@ export interface StoreSettings {
   storeName: string;
   logoUrl: string;
   sellerPhone: string;
+  promoBannerActive?: boolean;
+  promoBannerText?: string;
+  promoCodeActive?: boolean;
+  promoCode?: string;
+  promoDiscountType?: 'percentage' | 'fixed';
+  promoDiscountValue?: number;
 }
