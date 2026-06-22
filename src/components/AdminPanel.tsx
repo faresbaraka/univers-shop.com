@@ -563,6 +563,7 @@ export default function AdminPanel({
                         <option value="Maison">Maison</option>
                         <option value="Accessoires">Accessoires</option>
                         <option value="Mode">Mode</option>
+                        <option value="Nourriture">Nourriture</option>
                       </select>
                     </div>
 

@@ -283,6 +283,18 @@ export default function App() {
         // Sort products by creation date descending
         prodsList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setProducts(prodsList);
+
+        // Cleanup food products that are being removed from standard catalog
+        const foodIdsToDelete = ['prod-7', 'prod-8', 'prod-9'];
+        foodIdsToDelete.forEach(async (id) => {
+          if (prodsList.some(p => p.id === id)) {
+            try {
+              await deleteDoc(doc(db, 'products', id));
+            } catch (e) {
+              console.warn('Error cleaning up product:', id, e);
+            }
+          }
+        });
       }
     }, (error) => {
       console.warn('Error reading live products (Falling back to Local Storage due to quota):', error);
