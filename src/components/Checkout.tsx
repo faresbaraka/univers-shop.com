@@ -126,6 +126,12 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
 
   // Fetch state configuration from secure proxy backend
   useEffect(() => {
+    // Load customer profile if exists
+    const storedName = localStorage.getItem('univers_shop_cust_name');
+    const storedPhone = localStorage.getItem('univers_shop_cust_phone');
+    if (storedName) setName(storedName);
+    if (storedPhone) setPhone(storedPhone);
+
     fetch('/api/payments/config')
       .then(res => res.json())
       .then(data => {
