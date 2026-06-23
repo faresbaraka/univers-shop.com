@@ -182,9 +182,43 @@ export default function AdminPanel({
     if (file) {
       setIsUploadingImage(true);
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setProdImageUrl(reader.result as string);
-        setIsUploadingImage(false);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // Limit product image size to max 800px width/height while keeping aspect ratio
+          const MAX_SIZE = 800;
+          if (width > height) {
+            if (width > MAX_SIZE) {
+              height = Math.round((height * MAX_SIZE) / width);
+              width = MAX_SIZE;
+            }
+          } else {
+            if (height > MAX_SIZE) {
+              width = Math.round((width * MAX_SIZE) / height);
+              height = MAX_SIZE;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            // Compress as JPEG to make it ultra lightweight (0.75 quality is perfect for mobile)
+            const compressed = canvas.toDataURL('image/jpeg', 0.75);
+            setProdImageUrl(compressed);
+            setIsUploadingImage(false);
+          } else {
+            setProdImageUrl(event.target?.result as string);
+            setIsUploadingImage(false);
+          }
+        };
+        img.src = event.target?.result as string;
       };
       reader.readAsDataURL(file);
     }

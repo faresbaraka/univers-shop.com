@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ShoppingCart, ShieldCheck, Phone, Key, UserCheck, Menu, X, Check, Trophy } from 'lucide-react';
+import { ShoppingCart, ShieldCheck, Phone, Key, UserCheck, Menu, X, Check, Trophy, Globe } from 'lucide-react';
 import { CartItem } from '../types';
+import { Language, translate } from '../lib/translations';
 
 interface NavbarProps {
   cart: CartItem[];
@@ -13,6 +14,8 @@ interface NavbarProps {
   logoUrl?: string;
   userPoints?: number;
   onOpenQuestLog?: () => void;
+  language?: Language;
+  onLanguageChange?: (lang: Language) => void;
 }
 
 export default function Navbar({ 
@@ -25,7 +28,9 @@ export default function Navbar({
   storeName, 
   logoUrl,
   userPoints = 0,
-  onOpenQuestLog
+  onOpenQuestLog,
+  language = 'fr',
+  onLanguageChange
 }: NavbarProps) {
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [pinCode, setPinCode] = useState('');
@@ -36,14 +41,13 @@ export default function Navbar({
 
   const handleAdminAuth = (e: React.FormEvent) => {
     e.preventDefault();
-    // Default secret PIN is the first 4 digits of their phone, or simply 1234. Let's accept 1234 or 0558
     if (pinCode === '1234' || pinCode === '0558') {
       onToggleAdmin(true);
       setShowAdminLogin(false);
       setPinCode('');
       setErrorPin('');
     } else {
-      setErrorPin('Code PIN incorrect. Utilisez "1234" ou "0558".');
+      setErrorPin(language === 'ar' ? 'رمز غير صحيح. استخدم "1234" أو "0558"' : 'Code PIN incorrect. Utilisez "1234" ou "0558".');
     }
   };
 
@@ -51,8 +55,10 @@ export default function Navbar({
     onToggleAdmin(false);
   };
 
+  const isRtl = language === 'ar';
+
   return (
-    <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-xs">
+    <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-xs" dir={isRtl ? 'rtl' : 'ltr'}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo & Brand */}
@@ -72,14 +78,14 @@ export default function Navbar({
             )}
             <div className="hidden sm:flex items-center gap-1 text-[10px] uppercase font-bold text-[#059669] bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100/50">
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Garantie Sécurisée</span>
+              <span>{language === 'ar' ? 'ضمان مشفر' : language === 'en' ? 'Secured Seal' : 'Garantie Sécurisée'}</span>
             </div>
           </div>
 
           {/* Contact Seller - Primary Requirement */}
           <a 
             href={`tel:${sellerPhone}`} 
-            className="hidden md:flex items-center gap-2 bg-[#FF5C00] hover:bg-[#E05200] text-white px-5 py-2.5 rounded-full font-bold text-sm shadow-md shadow-[#FF5C00]/25 hover:scale-[1.02] transition-all cursor-pointer"
+            className="hidden lg:flex items-center gap-2 bg-[#FF5C00] hover:bg-[#E05200] text-white px-4 py-2 rounded-full font-bold text-xs shadow-md shadow-[#FF5C00]/25 hover:scale-[1.02] transition-all cursor-pointer"
             id="navbar-phone-btn"
           >
             <span>📞</span>
@@ -88,10 +94,28 @@ export default function Navbar({
 
           {/* Action Actions / Buttons */}
           <div className="flex items-center gap-2">
+            
+            {/* MANUAL LANGUAGE SELECTOR DROPDOWN */}
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-250 hover:bg-slate-100 rounded-xl px-2.5 py-1.5 transition-all text-xs font-bold text-slate-700">
+              <Globe className="w-3.5 h-3.5 text-[#0052FF]" />
+              <select 
+                value={language}
+                onChange={(e) => onLanguageChange?.(e.target.value as Language)}
+                className="bg-transparent focus:outline-none cursor-pointer pr-1"
+                id="language-selector-dropdown"
+              >
+                <option value="fr">🇫🇷 FR</option>
+                <option value="ar">🇩🇿 عربي</option>
+                <option value="en">🇬🇧 EN</option>
+              </select>
+            </div>
+
             {/* Status indicators for security */}
-            <div className="security-badge-active hidden lg:flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-100 py-1.5 px-3 rounded-full">
+            <div className="security-badge-active hidden xl:flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-100 py-1.5 px-3 rounded-full">
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              <span className="font-medium">Certificat SSL Sécurisé (AES-256)</span>
+              <span className="font-medium">
+                {language === 'ar' ? 'شهادة SSL نشطة' : language === 'en' ? 'SSL Active (AES-256)' : 'Certificat SSL Sécurisé (AES-256)'}
+              </span>
             </div>
 
             {/* Direct Order tracking button */}
@@ -101,7 +125,7 @@ export default function Navbar({
                 className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 text-slate-700 hover:text-[#0052FF] hover:border-[#0052FF]/50 text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer"
                 id="buyer-tracking-trigger"
               >
-                <span>📦 Suivi & Retours</span>
+                <span>📦 {language === 'ar' ? 'التتبع والإرجاع' : language === 'en' ? 'Tracking & Returns' : 'Suivi & Retours'}</span>
               </button>
             )}
 
@@ -140,14 +164,14 @@ export default function Navbar({
               <div className="flex items-center gap-2">
                 <span className="hidden sm:inline-flex items-center gap-1 bg-sky-50 text-sky-700 text-xs font-semibold px-3 py-1.5 rounded-lg border border-sky-100">
                   <UserCheck className="w-3.5 h-3.5" />
-                  Mode Vendeur
+                  {language === 'ar' ? 'لوحة البائع' : 'Mode Vendeur'}
                 </span>
                 <button
                   onClick={handleLogout}
                   className="bg-slate-900 text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
                   id="admin-logout-btn"
                 >
-                  Quitter
+                  {language === 'ar' ? 'خروج' : 'Quitter'}
                 </button>
               </div>
             ) : (
@@ -157,7 +181,7 @@ export default function Navbar({
                 id="admin-login-trigger-btn"
               >
                 <Key className="w-3.5 h-3.5 text-slate-500" />
-                <span className="hidden sm:inline">Espace Vendeur</span>
+                <span className="hidden sm:inline">{language === 'ar' ? 'دخول البائع' : language === 'en' ? 'Seller Hub' : 'Espace Vendeur'}</span>
               </button>
             )}
 
@@ -183,19 +207,49 @@ export default function Navbar({
               }}
               className="w-full flex items-center justify-center gap-1.5 bg-[#0052FF]/10 text-[#0052FF] text-xs font-bold py-3 px-4 rounded-xl hover:bg-[#0052FF]/15 transition-all cursor-pointer"
             >
-              <span>📦 Suivre mon colis & Retours</span>
+              <span>📦 {language === 'ar' ? 'تتبع طلبي والإرجاع' : 'Suivre mon colis & Retours'}</span>
             </button>
           )}
+
+          {/* Dedicated mobile seller portal button */}
+          <button
+            onClick={() => {
+              setMobileMenuOpen(false);
+              if (isAdmin) {
+                handleLogout();
+              } else {
+                setShowAdminLogin(true);
+              }
+            }}
+            className={`w-full flex items-center justify-center gap-2 text-xs font-bold py-3 px-4 rounded-xl transition-all cursor-pointer border ${
+              isAdmin 
+                ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100/50' 
+                : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200/50'
+            }`}
+          >
+            {isAdmin ? (
+              <>
+                <UserCheck className="w-4 h-4" />
+                <span>{language === 'ar' ? 'الخروج من لوحة البائع' : 'Quitter le Mode Vendeur'}</span>
+              </>
+            ) : (
+              <>
+                <Key className="w-4 h-4 text-slate-500" />
+                <span>{language === 'ar' ? 'دخول البائع' : 'Espace Vendeur (Code 1234)'}</span>
+              </>
+            )}
+          </button>
+
           <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
             <div className="flex items-center gap-2 text-slate-600">
               <Phone className="w-4 h-4 text-sky-600" />
-              <span className="text-xs font-semibold text-slate-800">Assistance client direct</span>
+              <span className="text-xs font-semibold text-slate-800">Assistance</span>
             </div>
             <a href={`tel:${sellerPhone}`} className="text-sm font-bold text-sky-600">{sellerPhone}</a>
           </div>
           <div className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 p-3 rounded-xl border border-emerald-100">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span className="font-medium">Commandes & paiements 100% sécurisés</span>
+            <span className="font-medium">{language === 'ar' ? 'أمان تام وموثوق 100%' : 'Commandes & paiements 100% sécurisés'}</span>
           </div>
         </div>
       )}
@@ -212,13 +266,13 @@ export default function Navbar({
                 <X className="w-4 h-4" />
               </button>
               <Key className="w-10 h-10 mx-auto text-sky-400 mb-2" />
-              <h3 className="font-display font-bold text-lg">Espace Vendeur Sécurisé</h3>
-              <p className="text-slate-400 text-xs mt-1">Saisissez votre code PIN administrateur pour lister vos produits et voir vos commandes.</p>
+              <h3 className="font-display font-bold text-lg">{language === 'ar' ? 'مساحة البائع الآمنة' : 'Espace Vendeur Sécurisé'}</h3>
+              <p className="text-slate-400 text-xs mt-1">{language === 'ar' ? 'أدخل رمز PIN لتسجيل الدخول ورؤية طلبات الزبائن' : 'Saisissez votre code PIN administrateur pour lister vos produits et voir vos commandes.'}</p>
             </div>
             <form onSubmit={handleAdminAuth} className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
-                  Code PIN d'accès
+                  Code PIN
                 </label>
                 <input
                   type="password"

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { CartItem, PaymentMethod, Order, StoreSettings } from '../types';
 import { ALGERIAN_WILAYAS } from '../data/mockProducts';
+import { Language, translate } from '../lib/translations';
 
 interface CheckoutProps {
   cart: CartItem[];
@@ -26,15 +27,31 @@ interface CheckoutProps {
   sellerPhone: string;
   storeSettings?: StoreSettings;
   onShowToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
+  language?: Language;
 }
 
-export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, sellerPhone, storeSettings, onShowToast }: CheckoutProps) {
+export default function Checkout({ 
+  cart, 
+  onClearCart, 
+  onClose, 
+  onOrderSuccess, 
+  sellerPhone, 
+  storeSettings, 
+  onShowToast,
+  language = 'fr'
+}: CheckoutProps) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1); // 1: Info, 2: Payment, 3: Secure3D_OTP (for card), 4: Ticket
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [selectedWilayaCode, setSelectedWilayaCode] = useState<number>(16); // Alger default
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('delivery');
+
+  // Anti-fraud and Bot protection states
+  const [isHumanVerified, setIsHumanVerified] = useState(false);
+  const [honeypot, setHoneypot] = useState('');
+  const [lastSubmissionTime, setLastSubmissionTime] = useState<number>(0);
+
 
   // Coupon promo states
   const [couponInput, setCouponInput] = useState('');
@@ -156,17 +173,46 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
 
   // Form validations
   const validateInfoStep = () => {
-    const newErrors: Record<string, string> = {};
-    if (!name.trim()) newErrors.name = 'Le nom complet est obligatoire.';
-    if (!phone.trim()) {
-      newErrors.phone = 'Le numéro de portable est obligatoire.';
-    } else if (!/^(05|06|07)\d{8}$/.test(phone.trim().replace(/\s/g, ''))) {
-      newErrors.phone = 'Format de numéro algérien invalide (ex: 0558926754).';
+    // 1. Honeypot check (Bots fill visible hidden fields)
+    if (honeypot.trim()) {
+      onShowToast?.(language === 'ar' ? "تم كشف نشاط مشبوه. تم إلغاء المعاملة." : "Activité suspecte détectée. Transaction annulée.", "error");
+      return false;
     }
-    if (!address.trim()) newErrors.address = 'L\'adresse de livraison est obligatoire.';
+
+    // 2. Rate limiting check (Avoid double clicks / rapid spam within 15 seconds)
+    const now = Date.now();
+    if (lastSubmissionTime !== 0 && now - lastSubmissionTime < 15000) {
+      onShowToast?.(
+        language === 'ar' ? "يرجى الانتظار قليلاً قبل إرسال الطلب مجدداً." : "Veuillez patienter quelques instants avant de soumettre à nouveau.",
+        "error"
+      );
+      return false;
+    }
+
+    const newErrors: Record<string, string> = {};
+    if (!name.trim()) {
+      newErrors.name = language === 'ar' ? 'الاسم الكامل مطلوب.' : 'Le nom complet est obligatoire.';
+    }
+    if (!phone.trim()) {
+      newErrors.phone = language === 'ar' ? 'رقم الهاتف مطلوب.' : 'Le numéro de portable est obligatoire.';
+    } else if (!/^(05|06|07)\d{8}$/.test(phone.trim().replace(/\s/g, ''))) {
+      newErrors.phone = language === 'ar' ? 'رقم الهاتف غير صالح (مثال: 0558926754)' : 'Format de numéro algérien invalide (ex: 0558926754).';
+    }
+    if (!address.trim()) {
+      newErrors.address = language === 'ar' ? 'عنوان التسليم مطلوب.' : "L'adresse de livraison est obligatoire.";
+    }
+
+    // 3. Human check
+    if (!isHumanVerified) {
+      newErrors.bot = language === 'ar' ? 'يرجى تأكيد أنك إنسان بالضغط على خانة التحقق.' : 'Veuillez cocher la case de sécurité pour confirmer que vous êtes humain.';
+    }
     
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    if (Object.keys(newErrors).length === 0) {
+      setLastSubmissionTime(now); // record submission time
+      return true;
+    }
+    return false;
   };
 
   const validateCardDetails = () => {
@@ -197,9 +243,43 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
     if (file) {
       setIsUploading(true);
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setReceiptImg(reader.result as string);
-        setIsUploading(false);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // Limit receipt image size to max 850px width/height while keeping aspect ratio
+          const MAX_SIZE = 850;
+          if (width > height) {
+            if (width > MAX_SIZE) {
+              height = Math.round((height * MAX_SIZE) / width);
+              width = MAX_SIZE;
+            }
+          } else {
+            if (height > MAX_SIZE) {
+              width = Math.round((width * MAX_SIZE) / height);
+              height = MAX_SIZE;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            // Compress as JPEG (0.7 quality is extremely lightweight and completely legible for text details)
+            const compressed = canvas.toDataURL('image/jpeg', 0.7);
+            setReceiptImg(compressed);
+            setIsUploading(false);
+          } else {
+            setReceiptImg(event.target?.result as string);
+            setIsUploading(false);
+          }
+        };
+        img.src = event.target?.result as string;
       };
       reader.readAsDataURL(file);
     }
@@ -463,16 +543,20 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
           {/* STEP 1: Contact Information & Address */}
           {step === 1 && (
-            <div className="space-y-4">
+            <div className="space-y-4" dir={language === 'ar' ? 'rtl' : 'ltr'}>
               <div>
-                <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-4">Informations de Livraison</h3>
+                <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-4">
+                  {language === 'ar' ? 'معلومات التوصيل والشحن السريع' : 'Informations de Livraison'}
+                </h3>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Nom Complet *</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                  {language === 'ar' ? 'الاسم الكامل *' : 'Nom Complet *'}
+                </label>
                 <input 
                   type="text" 
-                  placeholder="Ex: Mohamed Benali"
+                  placeholder={language === 'ar' ? 'مثال: محمد بن علي' : 'Ex: Mohamed Benali'}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
@@ -481,15 +565,17 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Numéro de Téléphone Algérien *</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                  {language === 'ar' ? 'رقم الهاتف الجزائري *' : 'Numéro de Téléphone Algérien *'}
+                </label>
                 <div className="relative">
-                  <Smartphone className="absolute left-3 top-3.5 w-4 h-4 text-slate-400" />
+                  <Smartphone className={`absolute ${language === 'ar' ? 'right-3' : 'left-3'} top-3.5 w-4 h-4 text-slate-400`} />
                   <input 
                     type="tel" 
                     placeholder="Ex: 0558926754"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+                    className={`w-full bg-slate-50 border border-slate-200 rounded-xl ${language === 'ar' ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500`}
                   />
                 </div>
                 {errors.phone && <p className="text-rose-500 text-xs font-semibold mt-1">{errors.phone}</p>}
@@ -497,7 +583,9 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Wilaya d'expédition *</label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                    {language === 'ar' ? 'ولاية الاستلام *' : "Wilaya d'expédition *"}
+                  </label>
                   <select 
                     value={selectedWilayaCode}
                     onChange={(e) => setSelectedWilayaCode(Number(e.target.value))}
@@ -512,7 +600,9 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Frais de livraison d'Algerie d'expédition</label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                    {language === 'ar' ? 'سعر الشحن والتوصيل' : "Frais de livraison d'expédition"}
+                  </label>
                   <div className="w-full bg-slate-100 border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 flex items-center justify-between">
                     <Truck className="w-4 h-4 text-slate-500" />
                     <span>{selectedWilaya.shippingFee.toLocaleString()} DA</span>
@@ -521,10 +611,12 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Adresse Complète *</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                  {language === 'ar' ? 'العنوان الكامل (البلدية والشارع) *' : 'Adresse Complète *'}
+                </label>
                 <textarea 
                   rows={3}
-                  placeholder="Numéro de rue, Cartier, Commune, Bureau de poste ou indications"
+                  placeholder={language === 'ar' ? 'رقم الشارع، الحي، البلدية، أو علامات توجيهية للموصل' : 'Numéro de rue, Quartier, Commune, Bureau de poste ou indications'}
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
@@ -532,17 +624,51 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
                 {errors.address && <p className="text-rose-500 text-xs font-semibold mt-1">{errors.address}</p>}
               </div>
 
+              {/* Anti-bot Honeypot Input (Invisible to humans) */}
+              <div style={{ position: 'absolute', opacity: 0, height: 0, width: 0, overflow: 'hidden', zIndex: -1 }}>
+                <input 
+                  type="text" 
+                  value={honeypot} 
+                  onChange={(e) => setHoneypot(e.target.value)} 
+                  tabIndex={-1} 
+                  autoComplete="off" 
+                />
+              </div>
+
+              {/* Bot Check Verification */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-center gap-3">
+                <input 
+                  type="checkbox" 
+                  id="human-verification-checkbox"
+                  checked={isHumanVerified}
+                  onChange={(e) => setIsHumanVerified(e.target.checked)}
+                  className="w-4.5 h-4.5 rounded border-slate-300 text-sky-600 focus:ring-sky-500 cursor-pointer"
+                />
+                <label htmlFor="human-verification-checkbox" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
+                  {language === 'ar' ? 'أؤكد أنني زبون حقيقي وأريد إرسال الطلب 🛡️' : 'Je certifie que je suis un client réel et souhaite envoyer ma commande 🛡️'}
+                </label>
+              </div>
+              {errors.bot && <p className="text-rose-500 text-xs font-semibold mt-1">{errors.bot}</p>}
+
               <div className="bg-sky-50 border border-sky-100 rounded-2xl p-4 flex gap-3 text-sky-900">
                 <AlertCircle className="w-5 h-5 flex-shrink-0 text-sky-600" />
-                <p className="text-xs leading-relaxed">
-                  🔒 Vos données personnelles sont hautement sécurisées par notre protocole d'encryptage propriétaire d'Univers Shop. Nous vérifions toutes les adresses par appel au <b>{sellerPhone}</b> avant expédition.
-                </p>
+                {language === 'ar' ? (
+                  <p className="text-xs leading-relaxed">
+                    🔒 بياناتك الشخصية مشفرة ومحمية بالكامل. لتفادي أي خطأ نقوم بتأكيد كل الطلبات عبر اتصال هاتفي سريع على رقمكم قبل الشحن.
+                  </p>
+                ) : (
+                  <p className="text-xs leading-relaxed">
+                    🔒 Vos données personnelles sont hautement sécurisées par notre protocole d\'encryptage propriétaire d\'Univers Shop. Nous vérifions toutes les adresses par appel au <b>{sellerPhone}</b> avant expédition.
+                  </p>
+                )}
               </div>
 
               {/* Optional Code Promo Coupon fields */}
               {storeSettings?.promoCodeActive && (
                 <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3 mt-4">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Avez-vous un Code de Réduction / Promo ?</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                    {language === 'ar' ? 'هل لديك كود تخفيض أو رمز ترويجي؟' : 'Avez-vous un Code de Réduction / Promo ?'}
+                  </span>
                   <div className="flex gap-2">
                     <input 
                       type="text" 
@@ -553,10 +679,10 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
                     />
                     <button
                       type="button"
-                      onClick={handleApplyCoupon}
+                      onClick={() => handleApplyCoupon()}
                       className="bg-slate-900 text-white font-bold text-xs px-4 py-2 rounded-xl hover:bg-sky-650 transition-colors cursor-pointer"
                     >
-                      Appliquer
+                      {language === 'ar' ? 'تطبيق' : 'Appliquer'}
                     </button>
                   </div>
                   {promoError && (

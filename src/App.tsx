@@ -19,6 +19,7 @@ import { Product, CartItem, Order, StoreSettings } from './types';
 import { INITIAL_PRODUCTS, ALGERIAN_WILAYAS } from './data/mockProducts';
 import Navbar from './components/Navbar';
 import ProductCard from './components/ProductCard';
+import ProductDetailModal from './components/ProductDetailModal';
 import Checkout from './components/Checkout';
 import AdminPanel from './components/AdminPanel';
 import BuyerOrderPortal from './components/BuyerOrderPortal';
@@ -27,6 +28,7 @@ import DiscountWheel from './components/DiscountWheel';
 import QuestSystem from './components/QuestSystem';
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
+import { Language, translate } from './lib/translations';
 
 const SELLER_PHONE = '0558926754';
 
@@ -146,6 +148,10 @@ export default function App() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isOrderPortalOpen, setIsOrderPortalOpen] = useState(false);
 
+  // Language & Detailed View selection states
+  const [language, setLanguage] = useState<Language>('fr');
+  const [selectedProductDetails, setSelectedProductDetails] = useState<Product | null>(null);
+
   // Gamification: Mission Économies & profile details state
   const [userPoints, setUserPoints] = useState<number>(() => {
     return Number(localStorage.getItem('univers_shop_points') || '0');
@@ -165,6 +171,38 @@ export default function App() {
     return localStorage.getItem('univers_shop_cust_phone') || '';
   });
   const [isQuestLogOpen, setIsQuestLogOpen] = useState(false);
+
+  // Animated counters for "Why choose us?"
+  const [clientsCount, setClientsCount] = useState(0);
+  const [wilayasCount, setWilayasCount] = useState(0);
+  const [satisfactionRate, setSatisfactionRate] = useState(0);
+  const [supportHours, setSupportHours] = useState(0);
+
+  useEffect(() => {
+    let start = 0;
+    const duration = 2000; // 2 seconds
+    const intervalTime = 30;
+    const steps = duration / intervalTime;
+    
+    const clientsStep = 10000 / steps;
+    const wilayasStep = 58 / steps;
+    const satisfactionStep = 98 / steps;
+    const supportStep = 24 / steps;
+
+    const timer = setInterval(() => {
+      start++;
+      setClientsCount(prev => Math.min(10000, Math.round(clientsStep * start)));
+      setWilayasCount(prev => Math.min(58, Math.round(wilayasStep * start)));
+      setSatisfactionRate(prev => Math.min(98, Math.round(satisfactionStep * start)));
+      setSupportHours(prev => Math.min(24, Math.round(supportStep * start)));
+
+      if (start >= steps) {
+        clearInterval(timer);
+      }
+    }, intervalTime);
+
+    return () => clearInterval(timer);
+  }, []);
 
   const completeQuest = (questId: string, pts: number, name: string) => {
     setCompletedQuests(prev => {
@@ -775,6 +813,8 @@ export default function App() {
         logoUrl={settings.logoUrl}
         userPoints={userPoints}
         onOpenQuestLog={() => setIsQuestLogOpen(true)}
+        language={language}
+        onLanguageChange={setLanguage}
       />
 
       {/* Primary viewport switch */}
@@ -849,6 +889,76 @@ export default function App() {
             </div>
           </div>
 
+          {/* Animated "Why Choose Us" Section */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-8" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+            <div className="bg-white border border-slate-150 rounded-[32px] p-6 sm:p-8 shadow-sm">
+              <div className="text-center max-w-xl mx-auto mb-6">
+                <h2 className="font-display font-black text-slate-950 text-base sm:text-lg tracking-tight">
+                  {translate('why_choose_us_title', language)}
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  {language === 'ar' ? 'نلتزم بتقديم أفضل تجربة تسوق إلكتروني آمنة وموثوقة لزبائننا في الجزائر' : 'Nous nous engageons à offrir la meilleure expérience d\'achat en ligne sécurisée et fiable en Algérie.'}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+                
+                {/* Metric 1 */}
+                <div className="space-y-1.5 p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-sky-500/30 transition-all">
+                  <div className="text-sky-600 font-display font-black text-xl sm:text-2xl tracking-tight">
+                    +{clientsCount.toLocaleString()}
+                  </div>
+                  <p className="text-xs font-bold text-slate-800">
+                    {language === 'ar' ? 'زبون راضٍ وفخور' : 'Clients Satisfaits'}
+                  </p>
+                  <p className="text-[10px] text-slate-400 font-medium">
+                    {language === 'ar' ? 'ثقة ومصداقية كاملة' : 'Confiance & Engagement'}
+                  </p>
+                </div>
+
+                {/* Metric 2 */}
+                <div className="space-y-1.5 p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-sky-500/30 transition-all">
+                  <div className="text-[#FF5C00] font-display font-black text-xl sm:text-2xl tracking-tight">
+                    {wilayasCount} {language === 'ar' ? 'ولاية' : 'Wilayas'}
+                  </div>
+                  <p className="text-xs font-bold text-slate-800">
+                    {language === 'ar' ? 'شحن لجميع الولايات' : 'Wilayas Desservies'}
+                  </p>
+                  <p className="text-[10px] text-slate-400 font-medium">
+                    {language === 'ar' ? 'توصيل سريع وباب المنزل' : 'Livraison rapide à domicile'}
+                  </p>
+                </div>
+
+                {/* Metric 3 */}
+                <div className="space-y-1.5 p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-sky-500/30 transition-all">
+                  <div className="text-emerald-600 font-display font-black text-xl sm:text-2xl tracking-tight">
+                    {satisfactionRate}%
+                  </div>
+                  <p className="text-xs font-bold text-slate-800">
+                    {language === 'ar' ? 'معدل الرضا والقبول' : 'Clients Heureux'}
+                  </p>
+                  <p className="text-[10px] text-slate-400 font-medium">
+                    {language === 'ar' ? 'ضمان جودة المنتج' : 'Garantie de qualité'}
+                  </p>
+                </div>
+
+                {/* Metric 4 */}
+                <div className="space-y-1.5 p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-sky-500/30 transition-all">
+                  <div className="text-indigo-600 font-display font-black text-xl sm:text-2xl tracking-tight">
+                    {supportHours}h/7 & {language === 'ar' ? '٢٤س' : '24h'}
+                  </div>
+                  <p className="text-xs font-bold text-slate-800">
+                    {language === 'ar' ? 'دعم متواصل على مدار الساعة' : 'Support Client 24/7'}
+                  </p>
+                  <p className="text-[10px] text-slate-400 font-medium">
+                    {language === 'ar' ? 'اتصال مباشر على ' : 'Appel direct au '}<b>{settings.sellerPhone}</b>
+                  </p>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
           {/* Filtering and Stores Items Catalog */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             
@@ -899,6 +1009,8 @@ export default function App() {
                     onAddToCart={handleAddToCart}
                     onHeart={handleProductHeart}
                     onShare={handleProductShare}
+                    language={language}
+                    onSelect={setSelectedProductDetails}
                   />
                 ))}
               </div>
@@ -1013,6 +1125,19 @@ export default function App() {
           onOrderSuccess={handleOrderSuccess}
           sellerPhone={settings.sellerPhone}
           storeSettings={settings}
+          onShowToast={showToast}
+          language={language}
+        />
+      )}
+
+      {/* Premium Product Detail Modal View Overlay */}
+      {selectedProductDetails && (
+        <ProductDetailModal 
+          product={selectedProductDetails}
+          allProducts={products}
+          onAddToCart={handleAddToCart}
+          onClose={() => setSelectedProductDetails(null)}
+          language={language}
           onShowToast={showToast}
         />
       )}
