@@ -1,15 +1,18 @@
-import React from 'react';
-import { ShoppingCart, ShieldCheck } from 'lucide-react';
+import React, { useState } from 'react';
+import { ShoppingCart, ShieldCheck, Heart, Share2 } from 'lucide-react';
 import { Product } from '../types';
 
 interface ProductCardProps {
   key?: string;
   product: Product;
   onAddToCart: (product: Product) => void;
+  onHeart?: (product: Product) => void;
+  onShare?: (product: Product) => void;
 }
 
-export default function ProductCard({ product, onAddToCart }: ProductCardProps) {
+export default function ProductCard({ product, onAddToCart, onHeart, onShare }: ProductCardProps) {
   const isOutOfStock = product.stock <= 0;
+  const [liked, setLiked] = useState(false);
 
   return (
     <div 
@@ -47,6 +50,38 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
           referrerPolicy="no-referrer"
           className="h-full w-full object-cover object-center group-hover:scale-105 transition-transform duration-500 rounded-t-3xl"
         />
+        
+        {/* Interactive Floating Action Buttons */}
+        {!isOutOfStock && (
+          <div className="absolute bottom-3 right-3 z-10 flex flex-col gap-2 opacity-90 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setLiked(!liked);
+                if (onHeart) onHeart(product);
+              }}
+              className={`p-2 rounded-full backdrop-blur-md shadow-md border transition-all hover:scale-110 active:scale-90 cursor-pointer ${
+                liked 
+                  ? 'bg-rose-500 text-white border-rose-400' 
+                  : 'bg-white/95 text-slate-700 border-slate-100 hover:text-rose-500'
+              }`}
+              title="Ajouter aux favoris"
+            >
+              <Heart className={`w-4 h-4 ${liked ? 'fill-current' : ''}`} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onShare) onShare(product);
+              }}
+              className="p-2 rounded-full bg-white/95 backdrop-blur-md text-slate-700 border border-slate-100 shadow-md transition-all hover:scale-110 active:scale-90 hover:text-sky-600 cursor-pointer"
+              title="Partager ce produit"
+            >
+              <Share2 className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {isOutOfStock && (
           <div className="absolute inset-0 bg-white/80 backdrop-blur-xs flex items-center justify-center">
             <span className="bg-rose-500 text-white font-display font-semibold text-sm px-4 py-2 rounded-xl shadow-lg">

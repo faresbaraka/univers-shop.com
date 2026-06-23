@@ -33,6 +33,7 @@ interface AdminPanelProps {
   sellerPhone: string;
   storeSettings?: StoreSettings;
   onUpdateSettings?: (settings: StoreSettings) => void;
+  onShowToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 const STOCK_IMAGE_PRESETS = [
@@ -57,7 +58,8 @@ export default function AdminPanel({
   onUpdateOrderFields,
   sellerPhone,
   storeSettings,
-  onUpdateSettings
+  onUpdateSettings,
+  onShowToast
 }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'dashboard' | 'settings'>('dashboard');
 
@@ -145,10 +147,18 @@ export default function AdminPanel({
         promoDiscountType: localPromoDiscountType,
         promoDiscountValue: localPromoDiscountValue ? Number(localPromoDiscountValue) : undefined
       });
-      alert('Paramètres de la boutique mis à jour avec succès !');
+      if (onShowToast) {
+        onShowToast('Paramètres de la boutique mis à jour avec succès !', 'success');
+      } else {
+        console.log('Paramètres de la boutique mis à jour avec succès !');
+      }
     } catch (err) {
       console.error(err);
-      alert('Erreur lors de la mise à jour des paramètres.');
+      if (onShowToast) {
+        onShowToast('Erreur lors de la mise à jour des paramètres.', 'error');
+      } else {
+        console.warn('Erreur lors de la mise à jour des paramètres.');
+      }
     } finally {
       setIsUpdatingSettings(false);
     }
@@ -292,10 +302,12 @@ export default function AdminPanel({
     }
   };
 
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-    p.category.toLowerCase().includes(productSearch.toLowerCase())
-  );
+  const filteredProducts = products.filter(p => {
+    const name = p.name || '';
+    const category = p.category || '';
+    return name.toLowerCase().includes(productSearch.toLowerCase()) ||
+           category.toLowerCase().includes(productSearch.toLowerCase());
+  });
 
   const filteredOrders = orders.filter(o => {
     if (orderFilter === 'all') return true;

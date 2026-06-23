@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   ShieldCheck, 
   ShoppingBag, 
@@ -22,6 +22,9 @@ import ProductCard from './components/ProductCard';
 import Checkout from './components/Checkout';
 import AdminPanel from './components/AdminPanel';
 import BuyerOrderPortal from './components/BuyerOrderPortal';
+import AIAssistant from './components/AIAssistant';
+import DiscountWheel from './components/DiscountWheel';
+import QuestSystem from './components/QuestSystem';
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
 
@@ -142,6 +145,105 @@ export default function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isOrderPortalOpen, setIsOrderPortalOpen] = useState(false);
+
+  // Gamification: Mission Économies & profile details state
+  const [userPoints, setUserPoints] = useState<number>(() => {
+    return Number(localStorage.getItem('univers_shop_points') || '0');
+  });
+  const [completedQuests, setCompletedQuests] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('univers_shop_quests');
+      return saved ? JSON.parse(saved) : [];
+    } catch (_) {
+      return [];
+    }
+  });
+  const [customerName, setCustomerName] = useState<string>(() => {
+    return localStorage.getItem('univers_shop_cust_name') || '';
+  });
+  const [customerPhone, setCustomerPhone] = useState<string>(() => {
+    return localStorage.getItem('univers_shop_cust_phone') || '';
+  });
+  const [isQuestLogOpen, setIsQuestLogOpen] = useState(false);
+
+  const completeQuest = (questId: string, pts: number, name: string) => {
+    setCompletedQuests(prev => {
+      if (prev.includes(questId)) return prev;
+      const updated = [...prev, questId];
+      localStorage.setItem('univers_shop_quests', JSON.stringify(updated));
+      
+      setUserPoints(current => {
+        const nextPoints = current + pts;
+        localStorage.setItem('univers_shop_points', String(nextPoints));
+        return nextPoints;
+      });
+
+      showToast(`🎉 Défi Réussi ! +${pts} pts : ${name}`, 'success');
+      return updated;
+    });
+  };
+
+  const handleAddPoints = (pts: number) => {
+    setUserPoints(current => {
+      const nextPoints = Math.max(0, current + pts);
+      localStorage.setItem('univers_shop_points', String(nextPoints));
+      return nextPoints;
+    });
+  };
+
+  const handleUpdateProfile = (name: string, phone: string) => {
+    setCustomerName(name);
+    setCustomerPhone(phone);
+    localStorage.setItem('univers_shop_cust_name', name);
+    localStorage.setItem('univers_shop_cust_phone', phone);
+  };
+
+  const handleProductHeart = (product: Product) => {
+    completeQuest('favori', 50, `Coup de cœur sur ${product.name}`);
+  };
+
+  const handleProductShare = (product: Product) => {
+    try {
+      const shareUrl = `${window.location.origin}/#product-${product.id}`;
+      navigator.clipboard.writeText(shareUrl);
+      showToast(`Lien copié dans le presse-papiers pour ${product.name} ! 🚀`, 'success');
+      completeQuest('partage', 50, `Partager ${product.name}`);
+    } catch (e) {
+      showToast("Erreur lors de la copie du lien.", "error");
+    }
+  };
+  
+  // Custom non-blocking Toast & Dialog states
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
+  const [deleteProductId, setDeleteProductId] = useState<string | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToastMessage(message);
+    setToastType(type);
+  };
+
+  const showToastRef = useRef(showToast);
+  useEffect(() => {
+    showToastRef.current = showToast;
+  }, [showToast]);
+
+  // Safe global alert override
+  useEffect(() => {
+    window.alert = (msg: string) => {
+      showToastRef.current(String(msg), 'info');
+    };
+  }, []);
+
+  // Toast auto-dismiss timer
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => {
+        setToastMessage(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
   
   // Filtering & Search
   const [selectedCategory, setSelectedCategory] = useState<string>('Tous');
@@ -255,6 +357,24 @@ export default function App() {
       const prodsList: Product[] = [];
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
+        
+        // Safely parse createdAt to always be a string ISO format
+        let createdAtStr = new Date().toISOString();
+        if (data.createdAt) {
+          if (typeof data.createdAt.toDate === 'function') {
+            createdAtStr = data.createdAt.toDate().toISOString();
+          } else if (typeof data.createdAt === 'string') {
+            createdAtStr = data.createdAt;
+          } else if (data.createdAt.seconds) {
+            createdAtStr = new Date(data.createdAt.seconds * 1000).toISOString();
+          } else {
+            const parsedDate = new Date(data.createdAt);
+            if (!isNaN(parsedDate.getTime())) {
+              createdAtStr = parsedDate.toISOString();
+            }
+          }
+        }
+
         prodsList.push({
           id: data.id || docSnap.id,
           name: data.name || 'Produit sans nom',
@@ -265,7 +385,7 @@ export default function App() {
           category: data.category || 'Tous',
           stock: data.stock !== undefined ? Number(data.stock) : 10,
           salesCount: Number(data.salesCount) || 0,
-          createdAt: data.createdAt || new Date().toISOString()
+          createdAt: createdAtStr
         } as Product);
       });
       
@@ -283,18 +403,6 @@ export default function App() {
         // Sort products by creation date descending
         prodsList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setProducts(prodsList);
-
-        // Cleanup food products that are being removed from standard catalog
-        const foodIdsToDelete = ['prod-7', 'prod-8', 'prod-9'];
-        foodIdsToDelete.forEach(async (id) => {
-          if (prodsList.some(p => p.id === id)) {
-            try {
-              await deleteDoc(doc(db, 'products', id));
-            } catch (e) {
-              console.warn('Error cleaning up product:', id, e);
-            }
-          }
-        });
       }
     }, (error) => {
       console.warn('Error reading live products (Falling back to Local Storage due to quota):', error);
@@ -302,6 +410,21 @@ export default function App() {
     });
 
     return () => unsubscribe();
+  }, []);
+
+  // Safe one-time cleanup of removed template products (Nourriture)
+  useEffect(() => {
+    const cleanupFoodProducts = async () => {
+      const foodIdsToDelete = ['prod-7', 'prod-8', 'prod-9'];
+      for (const id of foodIdsToDelete) {
+        try {
+          await deleteDoc(doc(db, 'products', id));
+        } catch (e) {
+          console.warn('Error cleaning up product:', id, e);
+        }
+      }
+    };
+    cleanupFoodProducts();
   }, []);
 
   useEffect(() => {
@@ -355,7 +478,16 @@ export default function App() {
   }, [cart]);
 
   // Categories list derived from current products catalog
-  const categories = ['Tous', ...Array.from(new Set(products.map(p => p.category)))];
+  const categories = [
+    'Tous',
+    ...Array.from(
+      new Set(
+        products
+          .map(p => p.category)
+          .filter((cat): cat is string => typeof cat === 'string' && cat.trim() !== '')
+      )
+    )
+  ];
 
   // Cart management operations
   const handleAddToCart = (product: Product) => {
@@ -364,7 +496,7 @@ export default function App() {
       if (existingIndex > -1) {
         const item = prevCart[existingIndex];
         if (item.quantity >= product.stock) {
-          alert('Stock maximum atteint pour ce produit !');
+          showToast('Stock maximum atteint pour ce produit !', 'error');
           return prevCart;
         }
         const updated = [...prevCart];
@@ -384,7 +516,7 @@ export default function App() {
           const nextQuantity = item.quantity + amount;
           if (nextQuantity <= 0) return null;
           if (nextQuantity > item.product.stock) {
-            alert('Quantité maximum pour le stock de cet article !');
+            showToast('Quantité maximum pour le stock de cet article !', 'error');
             return item;
           }
           return { ...item, quantity: nextQuantity };
@@ -411,43 +543,53 @@ export default function App() {
       salesCount: 0,
       createdAt: new Date().toISOString()
     };
+
+    // Optimistic UI update: instantly append product locally so user sees feedback right away
+    setProducts(prev => {
+      if (prev.some(p => p.id === nextId)) return prev;
+      return [productWithId, ...prev];
+    });
+
     try {
       await setDoc(doc(db, 'products', nextId), productWithId);
-      if (isOfflineMode) {
-        setProducts(prev => [productWithId, ...prev]);
-      }
+      showToast('Produit ajouté avec succès !', 'success');
     } catch (e) {
       console.warn('Failed to add product to Firestore, using local fallback:', e);
-      setProducts(prev => [productWithId, ...prev]);
-      alert('Mode Local : Produit ajouté avec succès de manière locale.');
+      showToast('Mode Local : Produit ajouté avec succès de manière locale.', 'info');
     }
   };
 
   const handleUpdateProduct = async (updatedProd: Product) => {
+    // Optimistic UI update: instantly update product locally
+    setProducts(prev => prev.map(p => p.id === updatedProd.id ? updatedProd : p));
+
     try {
       await setDoc(doc(db, 'products', updatedProd.id), updatedProd);
-      if (isOfflineMode) {
-        setProducts(prev => prev.map(p => p.id === updatedProd.id ? updatedProd : p));
-      }
+      showToast('Produit mis à jour avec succès !', 'success');
     } catch (e) {
       console.warn('Failed to update product in Firestore, using local fallback:', e);
-      setProducts(prev => prev.map(p => p.id === updatedProd.id ? updatedProd : p));
-      alert('Mode Local : Produit mis à jour localement.');
+      showToast('Mode Local : Produit mis à jour localement.', 'info');
     }
   };
 
-  const handleDeleteProduct = async (productId: string) => {
-    if (confirm('Voulez-vous vraiment retirer cet article d\'Univers Shop ?')) {
-      try {
-        await deleteDoc(doc(db, 'products', productId));
-        if (isOfflineMode) {
-          setProducts(prev => prev.filter(p => p.id !== productId));
-        }
-      } catch (e) {
-        console.warn('Failed to delete product from Firestore, using local fallback:', e);
-        setProducts(prev => prev.filter(p => p.id !== productId));
-        alert('Mode Local : Article retiré localement.');
-      }
+  const handleDeleteProduct = (productId: string) => {
+    setDeleteProductId(productId);
+  };
+
+  const confirmDeleteProduct = async () => {
+    if (!deleteProductId) return;
+    const targetId = deleteProductId;
+    setDeleteProductId(null);
+
+    // Optimistic UI update: instantly remove product locally
+    setProducts(prev => prev.filter(p => p.id !== targetId));
+
+    try {
+      await deleteDoc(doc(db, 'products', targetId));
+      showToast('Article retiré avec succès de la boutique.', 'success');
+    } catch (e) {
+      console.warn('Failed to delete product from Firestore, using local fallback:', e);
+      showToast('Mode Local : Article retiré localement.', 'info');
     }
   };
 
@@ -551,20 +693,32 @@ export default function App() {
       const myOrders = JSON.parse(localStorage.getItem('univers_shop_my_orders') || '[]');
       myOrders.push(newOrder.id);
       localStorage.setItem('univers_shop_my_orders', JSON.stringify(myOrders));
-      alert('Mode Local : Votre commande a été enregistrée avec succès de manière locale.');
+      showToast('Mode Local : Votre commande a été enregistrée avec succès de manière locale.', 'info');
     }
+
+    // Complete the first purchase/order gamified quest!
+    completeQuest('order_placed', 200, 'Première commande enregistrée');
+    localStorage.removeItem('univers_shop_active_coupon');
   };
 
   // Filtering products for listing
   const filteredProducts = products.filter(product => {
     const matchesCategory = selectedCategory === 'Tous' || product.category === selectedCategory;
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          product.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          product.category.toLowerCase().includes(searchQuery.toLowerCase());
+    const name = product.name || '';
+    const description = product.description || '';
+    const category = product.category || '';
+    const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          category.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+
+  // Main Navbar
+  const handleToggleAdminStatus = (status: boolean) => {
+    setIsAdmin(status);
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 selection:bg-sky-500 selection:text-white">
@@ -614,11 +768,13 @@ export default function App() {
         cart={cart}
         onOpenCart={() => setIsCartOpen(true)}
         isAdmin={isAdmin}
-        onToggleAdmin={setIsAdmin}
+        onToggleAdmin={handleToggleAdminStatus}
         onOpenOrderPortal={() => setIsOrderPortalOpen(true)}
         sellerPhone={settings.sellerPhone}
         storeName={settings.storeName}
         logoUrl={settings.logoUrl}
+        userPoints={userPoints}
+        onOpenQuestLog={() => setIsQuestLogOpen(true)}
       />
 
       {/* Primary viewport switch */}
@@ -635,6 +791,7 @@ export default function App() {
           sellerPhone={settings.sellerPhone}
           storeSettings={settings}
           onUpdateSettings={handleUpdateSettings}
+          onShowToast={showToast}
         />
       ) : (
         /* CLIENT STOREFRONT VIEW */
@@ -740,6 +897,8 @@ export default function App() {
                     key={product.id}
                     product={product}
                     onAddToCart={handleAddToCart}
+                    onHeart={handleProductHeart}
+                    onShare={handleProductShare}
                   />
                 ))}
               </div>
@@ -854,6 +1013,7 @@ export default function App() {
           onOrderSuccess={handleOrderSuccess}
           sellerPhone={settings.sellerPhone}
           storeSettings={settings}
+          onShowToast={showToast}
         />
       )}
 
@@ -864,7 +1024,45 @@ export default function App() {
           onUpdateOrderFields={handleUpdateOrderFields}
           onClose={() => setIsOrderPortalOpen(false)}
           sellerPhone={settings.sellerPhone}
+          onShowToast={showToast}
         />
+      )}
+
+      {/* Gamification, Discount Wheel & AI Sales Assistant widgets */}
+      {!isAdmin && (
+        <>
+          <QuestSystem 
+            userPoints={userPoints}
+            completedQuests={completedQuests}
+            onAddPoints={handleAddPoints}
+            onCompleteQuest={completeQuest}
+            onApplyPromo={(code) => {
+              localStorage.setItem('univers_shop_active_coupon', code);
+              showToast(`Coupon "${code}" activé avec succès !`, 'success');
+            }}
+            onShowToast={showToast}
+            isOpen={isQuestLogOpen}
+            onClose={() => setIsQuestLogOpen(false)}
+            customerName={customerName}
+            customerPhone={customerPhone}
+            onUpdateProfile={handleUpdateProfile}
+          />
+          
+          <DiscountWheel 
+            onApplyPromo={(code) => {
+              localStorage.setItem('univers_shop_active_coupon', code);
+            }}
+            onShowToast={showToast}
+            onCompleteQuest={completeQuest}
+          />
+
+          <AIAssistant 
+            products={products}
+            onAddToCart={handleAddToCart}
+            onShowToast={showToast}
+            onCompleteQuest={completeQuest}
+          />
+        </>
       )}
 
       {/* Universal footer */}
@@ -915,6 +1113,61 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* Custom Toast Notification System */}
+      {toastMessage && (
+        <div className="fixed bottom-5 right-5 z-50 animate-fade-in pointer-events-none">
+          <div className="pointer-events-auto flex items-center gap-3 bg-slate-900/95 backdrop-blur-md text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-800 max-w-sm transition-all duration-300 transform scale-100">
+            {toastType === 'success' ? (
+              <Check className="w-5 h-5 text-emerald-400 shrink-0" />
+            ) : toastType === 'error' ? (
+              <X className="w-5 h-5 text-rose-400 shrink-0" />
+            ) : (
+              <ShieldCheck className="w-5 h-5 text-sky-400 shrink-0" />
+            )}
+            <p className="text-xs font-semibold leading-relaxed">{toastMessage}</p>
+            <button 
+              onClick={() => setToastMessage(null)} 
+              className="text-slate-400 hover:text-white p-0.5 rounded-lg cursor-pointer ml-auto transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Beautiful Custom Product Deletion Confirmation Modal */}
+      {deleteProductId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-scale-up">
+            <div className="w-12 h-12 bg-rose-50 rounded-full flex items-center justify-center mb-4">
+              <Trash2 className="w-6 h-6 text-rose-500" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 mb-2 font-display">
+              Retirer cet article ?
+            </h3>
+            <p className="text-xs text-slate-500 leading-relaxed mb-6">
+              Voulez-vous vraiment retirer cet article d'Univers Shop ? Cette action supprimera définitivement le produit du catalogue et de la base de données Firestore.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setDeleteProductId(null)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteProduct}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md shadow-rose-600/10 hover:shadow-rose-600/20 transition-all cursor-pointer"
+              >
+                Retirer l'article
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

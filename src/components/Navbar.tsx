@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShoppingCart, ShieldCheck, Phone, Key, UserCheck, Menu, X, Check } from 'lucide-react';
+import { ShoppingCart, ShieldCheck, Phone, Key, UserCheck, Menu, X, Check, Trophy } from 'lucide-react';
 import { CartItem } from '../types';
 
 interface NavbarProps {
@@ -11,9 +11,22 @@ interface NavbarProps {
   sellerPhone: string;
   storeName?: string;
   logoUrl?: string;
+  userPoints?: number;
+  onOpenQuestLog?: () => void;
 }
 
-export default function Navbar({ cart, onOpenCart, isAdmin, onToggleAdmin, onOpenOrderPortal, sellerPhone, storeName, logoUrl }: NavbarProps) {
+export default function Navbar({ 
+  cart, 
+  onOpenCart, 
+  isAdmin, 
+  onToggleAdmin, 
+  onOpenOrderPortal, 
+  sellerPhone, 
+  storeName, 
+  logoUrl,
+  userPoints = 0,
+  onOpenQuestLog
+}: NavbarProps) {
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [pinCode, setPinCode] = useState('');
   const [errorPin, setErrorPin] = useState('');
@@ -89,6 +102,19 @@ export default function Navbar({ cart, onOpenCart, isAdmin, onToggleAdmin, onOpe
                 id="buyer-tracking-trigger"
               >
                 <span>📦 Suivi & Retours</span>
+              </button>
+            )}
+
+            {/* Gamified Missions & Level Badge */}
+            {!isAdmin && onOpenQuestLog && (
+              <button
+                onClick={onOpenQuestLog}
+                className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 hover:border-amber-300 text-amber-700 text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer hover:bg-amber-100/50"
+                id="quest-log-trigger"
+                title="Consulter vos missions économies et récompenses"
+              >
+                <Trophy className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                <span>{userPoints} pts</span>
               </button>
             )}
 

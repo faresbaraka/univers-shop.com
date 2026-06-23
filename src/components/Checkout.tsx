@@ -25,9 +25,10 @@ interface CheckoutProps {
   onOrderSuccess: (order: Order) => void;
   sellerPhone: string;
   storeSettings?: StoreSettings;
+  onShowToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, sellerPhone, storeSettings }: CheckoutProps) {
+export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, sellerPhone, storeSettings, onShowToast }: CheckoutProps) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1); // 1: Info, 2: Payment, 3: Secure3D_OTP (for card), 4: Ticket
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -71,8 +72,35 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
 
   // Dynamically calculate discount
   const getDiscountDeduction = () => {
-    if (!appliedPromoCode || !storeSettings || !storeSettings.promoCodeActive) return 0;
-    if (appliedPromoCode.trim().toUpperCase() !== storeSettings.promoCode?.trim().toUpperCase()) return 0;
+    if (!appliedPromoCode) return 0;
+    
+    const code = appliedPromoCode.trim().toUpperCase();
+    if (code === 'ROUELIVRAISON') return 0; // Handled in shipping total
+    if (code === 'ROUE50LIV') return 0; // Handled in shipping total
+    if (code === 'ROUE10') {
+      return Math.round((subtotal * 10) / 100);
+    }
+    if (code === 'ROUE5') {
+      return Math.round((subtotal * 5) / 100);
+    }
+    if (code === 'ROUE500') {
+      return Math.min(500, subtotal);
+    }
+    if (code === 'ROUECADEAU') {
+      return Math.min(200, subtotal);
+    }
+    if (code === 'RECOMPENSE150') {
+      return Math.min(150, subtotal);
+    }
+    if (code === 'RECOMPENSE300') {
+      return Math.min(350, subtotal);
+    }
+    if (code === 'RECOMPENSE500') {
+      return Math.min(650, subtotal);
+    }
+
+    if (!storeSettings || !storeSettings.promoCodeActive) return 0;
+    if (code !== storeSettings.promoCode?.trim().toUpperCase()) return 0;
 
     if (storeSettings.promoDiscountType === 'percentage') {
       const percentage = storeSettings.promoDiscountValue || 0;
@@ -84,7 +112,17 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
   };
 
   const discountDeduction = getDiscountDeduction();
-  const totalAmount = Math.max(0, subtotal - discountDeduction) + selectedWilaya.shippingFee;
+
+  const getShippingFee = () => {
+    if (!appliedPromoCode) return selectedWilaya.shippingFee;
+    const code = appliedPromoCode.trim().toUpperCase();
+    if (code === 'ROUELIVRAISON') return 0;
+    if (code === 'ROUE50LIV') return Math.round(selectedWilaya.shippingFee / 2);
+    return selectedWilaya.shippingFee;
+  };
+
+  const shippingFee = getShippingFee();
+  const totalAmount = Math.max(0, subtotal - discountDeduction) + shippingFee;
 
   // Fetch state configuration from secure proxy backend
   useEffect(() => {
@@ -221,12 +259,53 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
     }
   };
 
-  const handleApplyCoupon = () => {
+  const handleApplyCoupon = (externalCode?: string) => {
     setPromoError('');
     setPromoSuccessMsg('');
     
-    if (!couponInput.trim()) {
+    const targetCode = (externalCode || couponInput).trim().toUpperCase();
+    
+    if (!targetCode) {
       setPromoError('Veuillez entrer un code promo.');
+      return;
+    }
+
+    let discountDesc = '';
+    let isValide = false;
+
+    if (targetCode === 'ROUELIVRAISON') {
+      discountDesc = "Livraison Gratuite !";
+      isValide = true;
+    } else if (targetCode === 'ROUE50LIV') {
+      discountDesc = "Frais d'expédition réduits de 50% !";
+      isValide = true;
+    } else if (targetCode === 'ROUE10') {
+      discountDesc = "-10% sur tout le panier !";
+      isValide = true;
+    } else if (targetCode === 'ROUE5') {
+      discountDesc = "-5% sur tout le panier !";
+      isValide = true;
+    } else if (targetCode === 'ROUE500') {
+      discountDesc = "-500 DA immédiat !";
+      isValide = true;
+    } else if (targetCode === 'ROUECADEAU') {
+      discountDesc = "Cadeau de -200 DA appliqué !";
+      isValide = true;
+    } else if (targetCode === 'RECOMPENSE150') {
+      discountDesc = "-150 DA déduit de vos points !";
+      isValide = true;
+    } else if (targetCode === 'RECOMPENSE300') {
+      discountDesc = "-350 DA déduit de vos points !";
+      isValide = true;
+    } else if (targetCode === 'RECOMPENSE500') {
+      discountDesc = "-650 DA déduit de vos points !";
+      isValide = true;
+    }
+
+    if (isValide) {
+      setAppliedPromoCode(targetCode);
+      setPromoSuccessMsg(`Code promo "${targetCode}" validé avec succès (${discountDesc}) !`);
+      if (onShowToast) onShowToast(`Code promo "${targetCode}" appliqué avec succès !`, 'success');
       return;
     }
     
@@ -235,8 +314,8 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
       return;
     }
     
-    if (couponInput.trim().toUpperCase() === storeSettings.promoCode.trim().toUpperCase()) {
-      setAppliedPromoCode(couponInput.trim().toUpperCase());
+    if (targetCode === storeSettings.promoCode.trim().toUpperCase()) {
+      setAppliedPromoCode(targetCode);
       const value = storeSettings.promoDiscountValue || 0;
       const desc = storeSettings.promoDiscountType === 'percentage' ? `-${value}%` : `-${value.toLocaleString('fr-DZ')} DA`;
       setPromoSuccessMsg(`Code promo "${storeSettings.promoCode}" validé avec succès (${desc}) !`);
@@ -244,6 +323,14 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
       setPromoError('Code promo invalide. Veuillez réessayer.');
     }
   };
+
+  useEffect(() => {
+    // Auto-apply stored coupon from localStorage
+    const storedCoupon = localStorage.getItem('univers_shop_active_coupon');
+    if (storedCoupon) {
+      handleApplyCoupon(storedCoupon);
+    }
+  }, []);
 
   const handleOtpVerify = () => {
     if (enteredOtp === otpCode) {
@@ -577,7 +664,11 @@ export default function Checkout({ cart, onClearCart, onClose, onOrderSuccess, s
                           if (isChargilyConfigured) {
                             setUseRealChargily(true);
                           } else {
-                            alert("Pour activer les transactions réelles d'Algérie Poste (CIB/Edahabia), veuillez configurer la variable d'environnement CHARGILY_APP_KEY dans vos secrets de serveur. Vous pouvez utiliser le simulateur interactif ci-dessous pour le test.");
+                            if (onShowToast) {
+                              onShowToast("Pour activer les transactions réelles d'Algérie Poste (CIB/Edahabia), veuillez configurer la variable d'environnement CHARGILY_APP_KEY dans vos secrets de serveur. Vous pouvez utiliser le simulateur interactif ci-dessous pour le test.", "info");
+                            } else {
+                              console.warn("Pour activer les transactions réelles d'Algérie Poste (CIB/Edahabia), veuillez configurer la variable d'environnement CHARGILY_APP_KEY.");
+                            }
                           }
                         }}
                         className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${

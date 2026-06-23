@@ -21,9 +21,10 @@ interface BuyerOrderPortalProps {
   onUpdateOrderFields: (orderId: string, fields: Partial<Order>) => void;
   onClose: () => void;
   sellerPhone: string;
+  onShowToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-export default function BuyerOrderPortal({ orders, onUpdateOrderFields, onClose, sellerPhone }: BuyerOrderPortalProps) {
+export default function BuyerOrderPortal({ orders, onUpdateOrderFields, onClose, sellerPhone, onShowToast }: BuyerOrderPortalProps) {
   const [searchMethod, setSearchMethod] = useState<'id' | 'phone'>('phone');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Order[]>([]);
@@ -71,7 +72,11 @@ export default function BuyerOrderPortal({ orders, onUpdateOrderFields, onClose,
 
   const submitReturnRequest = (orderId: string) => {
     if (!returnDetail.trim()) {
-      alert("Veuillez fournir quelques détails sur le motif de votre retour.");
+      if (onShowToast) {
+        onShowToast("Veuillez fournir quelques détails sur le motif de votre retour.", "error");
+      } else {
+        console.warn("Veuillez fournir quelques détails sur le motif de votre retour.");
+      }
       return;
     }
 
@@ -98,7 +103,11 @@ export default function BuyerOrderPortal({ orders, onUpdateOrderFields, onClose,
     // Close form and show feedback
     setRequestingReturnOrderId(null);
     setReturnDetail('');
-    alert("Votre demande de retour sécurisée a été envoyée avec succès au service client Univers Shop. Notre personnel va l'examiner sous 24 heures.");
+    if (onShowToast) {
+      onShowToast("Votre demande de retour sécurisée a été envoyée avec succès au service client Univers Shop. Notre personnel va l'examiner sous 24 heures.", "success");
+    } else {
+      console.log("Votre demande de retour sécurisée a été envoyée.");
+    }
   };
 
   const getStepProgressIndex = (status: Order['orderStatus']) => {
