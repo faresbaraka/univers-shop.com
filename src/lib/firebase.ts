@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, doc, getDocFromServer } from "firebase/firestore";
+import { initializeFirestore, doc, getDocFromServer } from "firebase/firestore";
 
 const firebaseConfig = {
   projectId: "tactical-mesh-sw532",
@@ -12,9 +12,11 @@ const firebaseConfig = {
   measurementId: ""
 };
 
-// Initialize Firebase
+// Initialize Firebase with Long Polling enabled for robust connection in iframe sandboxes
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+}, firebaseConfig.firestoreDatabaseId);
 
 // Connectivity validation
 async function testConnection() {

@@ -53,43 +53,52 @@ async function startServer() {
       if (!client) {
         // Safe, responsive fallback simulation mode in case GEMINI_API_KEY is not configured yet
         const lastMsg = messages[messages.length - 1]?.content?.toLowerCase() || "";
-        let reply = "Marhaba ! Bienvenue chez Univers Shop ! 😊 Je suis votre conseiller d'achat IA. Que recherchez-vous aujourd'hui ? (Indiquez votre budget ou vos besoins)";
+        let reply = "Marhaba ! 😊 Je suis Yanis, votre conseiller style IA d'Univers Shop.\n\nPour vous proposer la tenue idéale, dites-moi :\n1️⃣ Quel est votre **âge** ?\n2️⃣ Quelle est votre **taille** ou morphologie ?\n3️⃣ Quel **style** aimez-vous et pour quelle **occasion** ?";
         
         if (products && Array.isArray(products) && products.length > 0) {
-          if (lastMsg.includes("budget") || lastMsg.includes("da") || lastMsg.includes("prix") || lastMsg.includes("cher")) {
+          const hasAge = lastMsg.match(/\d+\s*(ans|years)/i) || lastMsg.includes("âge") || lastMsg.includes("ans");
+          const hasSize = lastMsg.includes("taille") || lastMsg.match(/\b(s|m|l|xl|xxl)\b/i);
+          const hasStyle = lastMsg.includes("style") || lastMsg.includes("chic") || lastMsg.includes("sport") || lastMsg.includes("classique") || lastMsg.includes("décontracté");
+
+          if (hasAge || hasSize || hasStyle) {
+            // Give customized style recommendation from available products
+            const recProducts = products.slice(0, 2);
+            reply = `✨ **Vos Conseils de Style Personnalisés par Yanis :**\n\nMerci pour ces détails ! D'après votre profil, voici la tenue idéale que je vous conseille vivement dans notre boutique :\n\n` + 
+                    recProducts.map(p => `👕 *${p.name}* (${p.price.toLocaleString()} DA)\n📝 ${p.description}\n💡 *Pourquoi cette tenue ?* Cette pièce convient parfaitement à votre silhouette et s'accorde magnifiquement avec vos préférences pour un look élégant et moderne.`).join("\n\n") + 
+                    `\n\n👉 *Comment l'obtenir ?* Il vous suffit de fermer cette fenêtre, de cliquer sur **Ajouter au panier** sur la fiche de l'article, puis de valider votre commande !`;
+          } else if (lastMsg.includes("cher") || lastMsg.includes("budget")) {
             const cheapProducts = [...products].sort((a, b) => a.price - b.price).slice(0, 2);
-            reply = `D'après vos critères de budget, voici nos options de choix :\n\n` + 
+            reply = `D'après vos critères de budget, voici nos options de tenues élégantes à prix très abordables :\n\n` + 
                     cheapProducts.map(p => `📍 *${p.name}* à *${p.price.toLocaleString()} DA* - ${p.description}`).join("\n\n") + 
-                    `\n\nN'hésitez pas à les ajouter directement au panier pour finaliser votre commande !`;
-          } else if (lastMsg.includes("compar") || lastMsg.includes("vs") || lastMsg.includes("mieux")) {
-            const p1 = products[0];
-            const p2 = products[1] || products[0];
-            reply = `Voici un comparatif rapide entre deux de nos meilleurs articles :\n\n` +
-                    `1️⃣ *${p1.name}* (${p1.price.toLocaleString()} DA) : ${p1.description}\n` +
-                    `2️⃣ *${p2.name}* (${p2.price.toLocaleString()} DA) : ${p2.description}\n\n` +
-                    `Lequel préférez-vous ajouter à votre panier ?`;
+                    `\n\nN'hésitez pas à les ajouter au panier !`;
           } else {
             const featured = products.slice(0, 3);
-            reply = `Marhaba ! D'après l'inventaire actuel d'Univers Shop, je vous conseille vivement d'examiner ces articles de qualité :\n\n` + 
+            reply = `Marhaba ! D'après notre catalogue actuel, voici les plus belles tenues du moment :\n\n` + 
                     featured.map(p => `🌟 *${p.name}* (${p.price.toLocaleString()} DA) - ${p.description}`).join("\n\n") + 
-                    `\n\nQuelle est votre utilisation principale ou votre budget ? Je peux vous guider vers le meilleur choix !`;
+                    `\n\nDites-moi votre **âge**, votre **taille** et votre **style préféré** pour que je compose votre look idéal !`;
           }
         }
         return res.json({ text: reply });
       }
 
-      const systemInstruction = `Tu es l'assistant de vente virtuel d'Univers Shop, un site e-commerce algérien haut de gamme.
-Ton rôle est d'accueillir chaleureusement les visiteurs, de comprendre leurs besoins et de leur recommander les meilleurs produits de la boutique.
+      const systemInstruction = `Tu es Yanis, le styliste et conseiller de mode virtuel d'Univers Shop, un site e-commerce algérien haut de gamme de prêt-à-porter.
+Ton rôle est d'accompagner les acheteurs en leur proposant un conseil vestimentaire personnalisé et de composer la tenue ("outfit") idéale pour eux.
 
-CONSIGNES DE COMPORTEMENT :
-1. Sois chaleureux, professionnel et proactif. Salue les visiteurs en disant "Salam" ou "Marhaba ! Bienvenue chez Univers Shop !" pour être amical et typiquement algérien, tout en restant professionnel. Parle principalement en français clair et soigné.
-2. Tu as accès à la liste complète des produits en temps réel ci-dessous. Ne recommande QUE des produits qui existent réellement dans cette liste. Ne mentionne pas de produits fictifs. Pour chaque recommandation, précise le nom exact de l'article, son prix en DA (DZD) et sa description.
-3. Si le client vient d'arriver, guide-le en lui posant des questions sur son budget (en DA), ses préférences, ou l'utilisation souhaitée.
-4. Aide le client à comparer les produits s'il hésite entre plusieurs options de la liste.
-5. Guide le client vers l'achat : explique-lui qu'il lui suffit de cliquer sur "Ajouter au panier" sur la fiche du produit correspondant, puis d'aller dans le panier et cliquer sur "Passer la commande" pour choisir la livraison (sur les 58 wilayas) avec paiement cash à la livraison ou en ligne de manière 100% sécurisée.
-6. Sois concis et structuré dans tes réponses. Utilise des puces et du gras pour faciliter la lecture.
+CONSIGNES STRICTES DE COMPORTEMENT :
+1. Accueil chaleureux et typiquement algérien : Salue les visiteurs en disant "Salam !" ou "Marhaba ! Bienvenue chez Univers Shop !" tout en restant d'un professionnalisme impeccable et élégant. Parle principalement en français clair, raffiné et chaleureux.
+2. Démarche de styliste :
+   - Si le client ne les a pas encore donnés, demande-lui poliment de préciser son **âge**, sa **taille ou morphologie** (S, M, L, XL, ou sa hauteur/stature), ses **préférences de style** (sportswear, élégant, casual chic, classique, décontracté) et **l'occasion** (pour le travail, le quotidien, un mariage, l'Aïd, etc.).
+   - Tu dois poser ces questions de manière fluide et engageante.
+3. Recommandations de tenues :
+   - Une fois que le client t'a fourni des détails, analyse ses réponses (âge, taille, style) pour lui composer une ou plusieurs tenues coordonnées ("outfit") à partir des vêtements disponibles.
+   - Tu as accès à la liste complète des produits en temps réel ci-dessous. Ne recommande QUE des produits qui existent réellement dans cette liste ! Ne mentionne jamais d'articles imaginaires ou épuisés.
+   - Pour chaque article recommandé, explique clairement en quoi il correspond à son âge, sa silhouette, et ses goûts stylisés (ex: "Ce haut fluide en taille M mettra en valeur votre stature, associé à..."). Donne son nom exact, son prix en DA (DZD) et sa description.
+4. Guide vers l'achat :
+   - Explique au client qu'il lui suffit de cliquer sur le bouton "Ajouter au panier" sur la fiche du vêtement correspondant dans la boutique en arrière-plan, puis de cliquer sur l'icône de son panier pour commander.
+   - Rappelle-lui que la livraison est disponible sur les 58 wilayas d'Algérie avec paiement sécurisé à la livraison (Cash on Delivery) ou par carte CIB/Edahabia.
+5. Sois visuellement structuré : Utilise des puces, des émojis de mode (👔, 👗, 👟, ✨), et met les noms de produits et prix en gras pour une lisibilité exceptionnelle.
 
-Voici les produits actuellement disponibles en boutique :
+Voici le catalogue de vêtements disponibles en temps réel chez Univers Shop :
 ${JSON.stringify(products || [], null, 2)}
 `;
 

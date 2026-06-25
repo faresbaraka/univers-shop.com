@@ -37,6 +37,50 @@ import { Language, translate } from './lib/translations';
 
 const SELLER_PHONE = '0558926754';
 
+export interface AdminNotification {
+  id: string;
+  customerName: string;
+  customerWilaya: string;
+  totalAmount: number;
+  timestamp: Date;
+  itemsCount: number;
+}
+
+const playAdminNotificationSound = () => {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+    
+    // First high note (bell sound)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(659.25, now); // E5
+    gain1.gain.setValueAtTime(0.2, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.35);
+    
+    // Second note slightly delayed
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(880, now + 0.12); // A5
+    gain2.gain.setValueAtTime(0.2, now + 0.12);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.12);
+    osc2.stop(now + 0.5);
+  } catch (e) {
+    console.warn('Audio synthesis block or not allowed by browser autoplay policy:', e);
+  }
+};
+
 // Seed initial orders to make the admin dashboard look fully functional and dynamic
 const INITIAL_ORDERS: Order[] = [
   {
@@ -186,6 +230,7 @@ export default function App() {
   // Language & Detailed View selection states
   const [language, setLanguage] = useState<Language>('fr');
   const [selectedProductDetails, setSelectedProductDetails] = useState<Product | null>(null);
+  const [adminNotifications, setAdminNotifications] = useState<AdminNotification[]>([]);
 
   // Advanced Dynamic Filters
   const [maxPriceFilter, setMaxPriceFilter] = useState<number>(250000);
@@ -532,6 +577,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let isInitial = true;
     const unsubscribe = onSnapshot(collection(db, 'orders'), (snapshot) => {
       const ordersList: Order[] = [];
       snapshot.forEach((docSnap) => {
@@ -568,6 +614,35 @@ export default function App() {
         // Sort orders by transactionDate/ID
         ordersList.sort((a, b) => b.id.localeCompare(a.id));
         setOrders(ordersList);
+      }
+
+      // Live detection of newly placed orders (ignore initial snapshot fetch)
+      if (isInitial) {
+        isInitial = false;
+      } else {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const data = change.doc.data();
+            const orderId = data.id || change.doc.id;
+            
+            const freshOrder: AdminNotification = {
+              id: orderId,
+              customerName: data.customerName || 'Client',
+              customerWilaya: data.customerWilaya || 'Algérie',
+              totalAmount: Number(data.totalAmount) || 0,
+              timestamp: new Date(),
+              itemsCount: Array.isArray(data.items) ? data.items.length : 1
+            };
+            
+            setAdminNotifications(prev => {
+              if (prev.some(n => n.id === freshOrder.id)) return prev;
+              return [freshOrder, ...prev];
+            });
+            
+            // Sound play
+            playAdminNotificationSound();
+          }
+        });
       }
     }, (error) => {
       console.warn('Error reading live orders (Falling back to Local Storage due to quota):', error);
@@ -1399,6 +1474,74 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* Special Admin Real-Time Notifications Overlay */}
+      {isAdmin && adminNotifications.length > 0 && (
+        <div className="fixed top-20 right-5 z-50 flex flex-col gap-3 max-w-sm w-full animate-fade-in pointer-events-none">
+          {adminNotifications.map((notification) => (
+            <div 
+              key={notification.id} 
+              className="pointer-events-auto bg-slate-900 border border-amber-500/40 text-white rounded-2xl shadow-2xl p-4.5 flex flex-col gap-3 relative overflow-hidden transition-all duration-300 hover:scale-[1.02] border-l-4 border-l-amber-500"
+            >
+              {/* Background amber glow badge */}
+              <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-xl -mr-8 -mt-8 pointer-events-none" />
+              
+              <div className="flex items-start justify-between gap-2 z-10">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-amber-500 rounded-full animate-ping" />
+                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-400">
+                    Nouvelle Commande Reçue !
+                  </span>
+                </div>
+                <button
+                  onClick={() => setAdminNotifications(prev => prev.filter(n => n.id !== notification.id))}
+                  className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="z-10 space-y-1">
+                <p className="text-sm font-bold tracking-tight">
+                  {notification.customerName}
+                </p>
+                <div className="flex items-center gap-2 text-[11px] text-slate-300">
+                  <span className="bg-slate-800 px-2 py-0.5 rounded-md font-medium text-slate-200">
+                    📍 {notification.customerWilaya}
+                  </span>
+                  <span>•</span>
+                  <span>{notification.itemsCount} article(s)</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-4 mt-1 pt-3 border-t border-slate-800 z-10">
+                <div>
+                  <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Montant total</p>
+                  <p className="text-sm font-black text-amber-400">{notification.totalAmount.toLocaleString()} DA</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setAdminNotifications(prev => prev.filter(n => n.id !== notification.id));
+                    showToast(`Affichage des détails de la commande de ${notification.customerName}`, 'success');
+                  }}
+                  className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md shadow-amber-500/25"
+                >
+                  Voir la commande
+                </button>
+              </div>
+            </div>
+          ))}
+          
+          {adminNotifications.length > 1 && (
+            <button
+              onClick={() => setAdminNotifications([])}
+              className="pointer-events-auto text-center text-[10px] font-black uppercase tracking-wider text-slate-300 hover:text-white bg-slate-950/80 backdrop-blur-md py-2 px-4 rounded-xl border border-slate-800 transition-all self-center cursor-pointer hover:bg-slate-900"
+            >
+              Tout marquer comme lu ({adminNotifications.length})
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Custom Toast Notification System */}
       {toastMessage && (

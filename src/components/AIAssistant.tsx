@@ -19,7 +19,7 @@ export default function AIAssistant({ products, onAddToCart, onShowToast, onComp
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'model',
-      content: "Salam ! Marhaba chez Univers Shop ! 😊 Je suis Yanis, votre conseiller IA personnel. \n\nPour que je trouve le produit idéal pour vous, dites-moi :\n- Quel est votre **budget maximum** ? (en DA)\n- Quel **type d'article** recherchez-vous ?\n- Quelle sera son **utilisation principale** ?"
+      content: "Salam ! Marhaba chez Univers Shop ! 😊 Je suis Yanis, votre styliste et conseiller IA personnel.\n\nPour vous conseiller la tenue idéale de notre catalogue qui vous ira à merveille, j'ai besoin de mieux vous connaître ! Dites-moi :\n- Quel est votre **âge** ?\n- Quelle est votre **taille** ou morphologie (ex: S, M, L, XL, ou votre hauteur) ?\n- Quel **style** préférez-vous (Décontracté, Classique, Sportswear, ou Chic/Événement) ?\n- S'agit-il d'une tenue pour le **quotidien** ou pour une **occasion spéciale** ?"
     }
   ]);
   const [input, setInput] = useState('');
@@ -133,10 +133,9 @@ export default function AIAssistant({ products, onAddToCart, onShowToast, onComp
   };
 
   const quickReplies = [
-    { label: "💰 Quel est l'article le moins cher ?", text: "Quels sont les produits les moins chers ou les meilleures offres ?" },
-    { label: "🔥 Quels sont les produits phares ?", text: "Quels sont vos meilleurs produits disponibles en ce moment ?" },
-    { label: "📦 Comment commander ?", text: "Comment puis-je passer une commande et comment se passe la livraison ?" },
-    { label: "⚖️ Comparez les articles", text: "Pouvez-vous me faire un comparatif rapide de vos articles de la boutique ?" }
+    { label: "👗 Trouver mon look idéal", text: "Salut Yanis ! Je souhaite trouver une tenue idéale. Peux-tu me poser des questions sur mon âge, ma taille/morphologie, mes préférences de style et l'occasion ?" },
+    { label: "✨ Look décontracté de tous les jours", text: "Je cherche une superbe tenue confortable pour le quotidien ! Que me proposes-tu de beau ?" },
+    { label: "👔 Tenue Chic pour un événement", text: "J'ai un événement spécial ou une fête à célébrer, conseille-moi une tenue élégante du catalogue." }
   ];
 
   return (
@@ -148,17 +147,17 @@ export default function AIAssistant({ products, onAddToCart, onShowToast, onComp
           <div className="bg-slate-900 px-5 py-4 text-white flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="relative">
-                <div className="w-10 h-10 rounded-full bg-sky-500/20 flex items-center justify-center border border-sky-400">
-                  <Bot className="w-5 h-5 text-sky-400" />
+                <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center border border-amber-400">
+                  <Bot className="w-5 h-5 text-amber-400" />
                 </div>
                 <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-slate-900 rounded-full"></span>
               </div>
               <div>
                 <h3 className="font-display font-bold text-sm flex items-center gap-1.5">
                   Yanis 
-                  <span className="text-[10px] bg-sky-500/20 text-sky-400 border border-sky-500/30 px-1.5 py-0.5 rounded-full font-semibold">Conseiller IA</span>
+                  <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full font-semibold">Styliste IA</span>
                 </h3>
-                <p className="text-[10px] text-slate-400">En ligne &bull; Réponse instantanée</p>
+                <p className="text-[10px] text-slate-400">En ligne &bull; Conseiller Style</p>
               </div>
             </div>
             <button 
@@ -175,13 +174,13 @@ export default function AIAssistant({ products, onAddToCart, onShowToast, onComp
               <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] rounded-2xl p-3.5 shadow-xs ${
                   msg.role === 'user' 
-                    ? 'bg-sky-600 text-white rounded-tr-none' 
+                    ? 'bg-amber-600 text-white rounded-tr-none' 
                     : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none'
                 }`}>
                   {msg.role === 'model' && (
-                    <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-sky-600 mb-1">
-                      <Sparkles className="w-3 h-3" />
-                      <span>Univers Shop IA</span>
+                    <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-amber-600 mb-1">
+                      <Sparkles className="w-3 h-3 text-amber-500" />
+                      <span>Univers Styliste IA</span>
                     </div>
                   )}
                   <div className={msg.role === 'user' ? 'text-white text-xs sm:text-sm' : 'space-y-1'}>
@@ -194,9 +193,9 @@ export default function AIAssistant({ products, onAddToCart, onShowToast, onComp
             {isLoading && (
               <div className="flex justify-start">
                 <div className="bg-white rounded-2xl rounded-tl-none p-4 border border-slate-100 shadow-xs flex items-center gap-2">
-                  <span className="w-2 h-2 bg-sky-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                  <span className="w-2 h-2 bg-sky-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                  <span className="w-2 h-2 bg-sky-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                  <span className="w-2 h-2 bg-amber-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                  <span className="w-2 h-2 bg-amber-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                  <span className="w-2 h-2 bg-amber-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
                 </div>
               </div>
             )}
@@ -210,7 +209,7 @@ export default function AIAssistant({ products, onAddToCart, onShowToast, onComp
                 <button
                   key={i}
                   onClick={() => handleSend(reply.text)}
-                  className="bg-white border border-slate-200 text-slate-700 hover:text-sky-600 hover:border-sky-500 hover:bg-sky-50/20 text-[11px] font-semibold px-3 py-1.5 rounded-full shadow-2xs transition-all cursor-pointer flex-shrink-0"
+                  className="bg-white border border-slate-200 text-slate-700 hover:text-amber-600 hover:border-amber-500 hover:bg-amber-55/20 text-[11px] font-semibold px-3 py-1.5 rounded-full shadow-2xs transition-all cursor-pointer flex-shrink-0"
                 >
                   {reply.label}
                 </button>
@@ -225,17 +224,17 @@ export default function AIAssistant({ products, onAddToCart, onShowToast, onComp
           >
             <input
               type="text"
-              placeholder="Posez votre question (ex: Quel est mon budget ?)..."
+              placeholder="Écrivez à Yanis (ex: J'ai 28 ans, taille M, style chic)..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
             />
             <button
               type="submit"
               disabled={!input.trim() || isLoading}
               className={`p-2.5 rounded-xl transition-all ${
                 input.trim() && !isLoading
-                  ? 'bg-sky-600 hover:bg-sky-700 text-white cursor-pointer'
+                  ? 'bg-amber-600 hover:bg-amber-700 text-white cursor-pointer'
                   : 'bg-slate-100 text-slate-400 cursor-not-allowed'
               }`}
             >
