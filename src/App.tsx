@@ -13,9 +13,13 @@ import {
   Check, 
   X,
   Lock,
-  MessageSquare
+  MessageSquare,
+  Sliders,
+  Moon,
+  Sun
 } from 'lucide-react';
-import { Product, CartItem, Order, StoreSettings } from './types';
+import { Product, CartItem, Order, StoreSettings, AISuiteState } from './types';
+import { DEFAULT_AI_STATE, runAIOptimizationCycle } from './lib/aiSuite';
 import { INITIAL_PRODUCTS, ALGERIAN_WILAYAS } from './data/mockProducts';
 import Navbar from './components/Navbar';
 import ProductCard from './components/ProductCard';
@@ -26,6 +30,7 @@ import BuyerOrderPortal from './components/BuyerOrderPortal';
 import AIAssistant from './components/AIAssistant';
 import DiscountWheel from './components/DiscountWheel';
 import QuestSystem from './components/QuestSystem';
+import { BackToTopButton } from './components/AIEnhancedSuite';
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
 import { Language, translate } from './lib/translations';
@@ -148,9 +153,44 @@ export default function App() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isOrderPortalOpen, setIsOrderPortalOpen] = useState(false);
 
+  // AI Suite state
+  const [aiState, setAiState] = useState<AISuiteState>(DEFAULT_AI_STATE);
+
+  // Automatic Dark Mode
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('univers_shop_dark_mode');
+    if (saved !== null) {
+      return saved === 'true';
+    }
+    // Auto-detect night hours (after 18:00 or before 07:00)
+    const hour = new Date().getHours();
+    if (hour >= 18 || hour < 7) {
+      return true;
+    }
+    // Auto-detect browser/OS system dark mode
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return true;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('univers_shop_dark_mode', String(darkMode));
+  }, [darkMode]);
+
   // Language & Detailed View selection states
   const [language, setLanguage] = useState<Language>('fr');
   const [selectedProductDetails, setSelectedProductDetails] = useState<Product | null>(null);
+
+  // Advanced Dynamic Filters
+  const [maxPriceFilter, setMaxPriceFilter] = useState<number>(250000);
+  const [sortBy, setSortBy] = useState<'default' | 'priceAsc' | 'priceDesc' | 'sales'>('default');
+  const [onlyInStock, setOnlyInStock] = useState<boolean>(false);
 
   // Gamification: Mission Économies & profile details state
   const [userPoints, setUserPoints] = useState<number>(() => {
@@ -343,6 +383,32 @@ export default function App() {
     }, (error) => {
       console.warn('Error listening to store settings (Falling back to Local Storage due to quota):', error);
       setIsOfflineMode(true);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Load and listen to AI Control state in Firestore in real-time
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, 'settings', 'ai_control'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data() as AISuiteState;
+        // Make sure arrays are defined to avoid runtime errors
+        setAiState({
+          ...DEFAULT_AI_STATE,
+          ...data,
+          adCampaigns: data.adCampaigns || DEFAULT_AI_STATE.adCampaigns,
+          pricingDecisions: data.pricingDecisions || DEFAULT_AI_STATE.pricingDecisions,
+          marketingCampaigns: data.marketingCampaigns || DEFAULT_AI_STATE.marketingCampaigns,
+          historicalStats: data.historicalStats || DEFAULT_AI_STATE.historicalStats
+        });
+      } else {
+        // Safe seeding if the doc doesn't exist yet
+        setDoc(doc(db, 'settings', 'ai_control'), DEFAULT_AI_STATE)
+          .catch((err) => console.warn('Warning generating AI control document:', err));
+      }
+    }, (error) => {
+      console.warn('Error listening to AI control state, falling back to local state:', error);
     });
 
     return () => unsubscribe();
@@ -641,6 +707,38 @@ export default function App() {
     }
   };
 
+  const handleUpdateAIState = async (newState: AISuiteState) => {
+    try {
+      await setDoc(doc(db, 'settings', 'ai_control'), newState);
+      setAiState(newState);
+    } catch (e) {
+      console.warn('Failed to update AI state in Firestore, using local fallback:', e);
+      setAiState(newState);
+    }
+  };
+
+  const handleRunAISimulation = async () => {
+    // Run the optimization cycle
+    const { updatedState, updatedProducts, logs } = runAIOptimizationCycle(aiState, products);
+    
+    // Update AI state in Firestore
+    await handleUpdateAIState(updatedState);
+    
+    // If any product price was updated, update those products in Firestore!
+    for (const prod of updatedProducts) {
+      const origProd = products.find(p => p.id === prod.id);
+      if (origProd && origProd.price !== prod.price) {
+        try {
+          await setDoc(doc(db, 'products', prod.id), prod);
+        } catch (e) {
+          console.warn(`Failed to update product ${prod.id} in Firestore:`, e);
+        }
+      }
+    }
+
+    return logs;
+  };
+
   // Orders status Updates (called from admin panel or buyer tracking, in Firestore)
   const handleUpdateOrderFields = async (orderId: string, fields: Partial<Order>) => {
     const existingOrder = orders.find(o => o.id === orderId);
@@ -739,7 +837,7 @@ export default function App() {
     localStorage.removeItem('univers_shop_active_coupon');
   };
 
-  // Filtering products for listing
+  // Filtering products for listing with Advanced Filters
   const filteredProducts = products.filter(product => {
     const matchesCategory = selectedCategory === 'Tous' || product.category === selectedCategory;
     const name = product.name || '';
@@ -748,7 +846,14 @@ export default function App() {
     const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           description.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           category.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+    const matchesPrice = product.price <= maxPriceFilter;
+    const matchesStock = !onlyInStock || product.stock > 0;
+    return matchesCategory && matchesSearch && matchesPrice && matchesStock;
+  }).sort((a, b) => {
+    if (sortBy === 'priceAsc') return a.price - b.price;
+    if (sortBy === 'priceDesc') return b.price - a.price;
+    if (sortBy === 'sales') return b.salesCount - a.salesCount;
+    return 0; // Default sorting by insertion/ID order
   });
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
@@ -832,6 +937,9 @@ export default function App() {
           storeSettings={settings}
           onUpdateSettings={handleUpdateSettings}
           onShowToast={showToast}
+          aiState={aiState}
+          onUpdateAIState={handleUpdateAIState}
+          onRunAISimulation={handleRunAISimulation}
         />
       ) : (
         /* CLIENT STOREFRONT VIEW */
@@ -963,33 +1071,86 @@ export default function App() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             
             {/* Category Tags selection bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4 border-b border-slate-150 pb-6">
-              {/* Sliders categories */}
-              <div className="flex flex-wrap gap-2">
-                {categories.map((category) => (
-                  <button
-                    key={category}
-                    onClick={() => setSelectedCategory(category)}
-                    className={`px-4.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                      selectedCategory === category
-                        ? 'bg-sky-50 border-sky-200/60 text-sky-600 shadow-xs'
-                        : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-sky-600'
-                    }`}
-                  >
-                    {category}
-                  </button>
-                ))}
+            <div className="flex flex-col gap-5 mb-8 border-b border-slate-150 pb-6">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                {/* Sliders categories */}
+                <div className="flex flex-wrap gap-2">
+                  {categories.map((category) => (
+                    <button
+                      key={category}
+                      onClick={() => setSelectedCategory(category)}
+                      className={`px-4.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                        selectedCategory === category
+                          ? 'bg-sky-50 border-sky-200/60 text-sky-600 shadow-xs'
+                          : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-sky-600'
+                      }`}
+                    >
+                      {category}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Standard text search */}
+                <div className="w-full lg:max-w-xs">
+                  <input
+                    type="text"
+                    placeholder={language === 'ar' ? 'بحث عن منتج، موديل...' : 'Rechercher un modèle, une marque...'}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                  />
+                </div>
               </div>
 
-              {/* Standard text search */}
-              <div className="w-full sm:max-w-xs">
-                <input
-                  type="text"
-                  placeholder="Rechercher un modèle, une marque..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20"
-                />
+              {/* Advanced Dynamic Filters Tray */}
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4.5 grid grid-cols-1 md:grid-cols-3 gap-5 items-center">
+                {/* Price Range Slider */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-600">
+                    <span>{language === 'ar' ? 'السعر الأقصى:' : 'Prix Maximum:'}</span>
+                    <span className="text-sky-600 font-mono">{maxPriceFilter.toLocaleString()} DA</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1000"
+                    max="300000"
+                    step="5000"
+                    value={maxPriceFilter}
+                    onChange={(e) => setMaxPriceFilter(Number(e.target.value))}
+                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-600"
+                  />
+                </div>
+
+                {/* Sort By Dropdown */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-600">
+                    {language === 'ar' ? 'ترتيب حسب:' : 'Trier par :'}
+                  </label>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as any)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500/10"
+                  >
+                    <option value="default">{language === 'ar' ? 'افتراضي' : 'Par défaut'}</option>
+                    <option value="priceAsc">{language === 'ar' ? 'السعر: من الأقل للأعلى' : 'Prix : Croissant'}</option>
+                    <option value="priceDesc">{language === 'ar' ? 'السعر: من الأعلى للأقل' : 'Prix : Décroissant'}</option>
+                    <option value="sales">{language === 'ar' ? 'الأكثر مبيعاً' : 'Les plus vendus'}</option>
+                  </select>
+                </div>
+
+                {/* Stock toggle checkbox */}
+                <div className="flex items-center gap-3 h-full pt-4 md:pt-0">
+                  <input
+                    type="checkbox"
+                    id="onlyInStockCheckbox"
+                    checked={onlyInStock}
+                    onChange={(e) => setOnlyInStock(e.target.checked)}
+                    className="w-4 h-4 text-sky-600 border-slate-200 rounded-sm focus:ring-sky-500"
+                  />
+                  <label htmlFor="onlyInStockCheckbox" className="text-xs font-black text-slate-600 cursor-pointer select-none">
+                    {language === 'ar' ? 'المنتجات المتوفرة فقط' : 'Afficher uniquement les articles en stock'}
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -1293,6 +1454,20 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Floating Dark Mode Toggle Button */}
+      <div className="fixed bottom-24 right-5 z-45">
+        <button
+          onClick={() => setDarkMode(!darkMode)}
+          className="relative flex items-center justify-center w-14 h-14 rounded-full bg-slate-900 text-white shadow-2xl hover:scale-110 active:scale-95 transition-all cursor-pointer border border-slate-800"
+          title="Basculer le mode Sombre/Clair"
+        >
+          {darkMode ? <Sun className="w-6 h-6 text-amber-400" /> : <Moon className="w-6 h-6 text-sky-400" />}
+        </button>
+      </div>
+
+      {/* Back to Top Smart Button */}
+      <BackToTopButton />
     </div>
   );
 }

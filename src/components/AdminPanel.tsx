@@ -17,9 +17,19 @@ import {
   Eye, 
   User, 
   Phone,
-  Upload
+  Upload,
+  Brain,
+  Sparkles,
+  Sliders,
+  BarChart3,
+  RefreshCw,
+  Play,
+  Shield,
+  Megaphone,
+  Percent,
+  Lightbulb
 } from 'lucide-react';
-import { Product, Order, PaymentMethod, StoreSettings } from '../types';
+import { Product, Order, PaymentMethod, StoreSettings, AISuiteState, AICampaign, AIDecision, AIMarketingCampaign } from '../types';
 
 interface AdminPanelProps {
   products: Product[];
@@ -34,6 +44,9 @@ interface AdminPanelProps {
   storeSettings?: StoreSettings;
   onUpdateSettings?: (settings: StoreSettings) => void;
   onShowToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
+  aiState?: AISuiteState;
+  onUpdateAIState?: (newState: AISuiteState) => void;
+  onRunAISimulation?: () => Promise<string[]>;
 }
 
 const STOCK_IMAGE_PRESETS = [
@@ -59,9 +72,14 @@ export default function AdminPanel({
   sellerPhone,
   storeSettings,
   onUpdateSettings,
-  onShowToast
+  onShowToast,
+  aiState,
+  onUpdateAIState,
+  onRunAISimulation
 }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'dashboard' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'dashboard' | 'settings' | 'ai_control'>('dashboard');
+  const [simulationLogs, setSimulationLogs] = useState<string[]>([]);
+  const [isRunningSimulation, setIsRunningSimulation] = useState(false);
 
   // Store general settings form states
   const [localStoreName, setLocalStoreName] = useState(storeSettings?.storeName || 'Univers Shop');
@@ -88,6 +106,139 @@ export default function AdminPanel({
       setLocalPromoDiscountValue(storeSettings.promoDiscountValue?.toString() || '');
     }
   }, [storeSettings]);
+
+  // AI Suite helper functions
+  const updateAISuiteParam = (key: keyof AISuiteState, value: any) => {
+    if (aiState && onUpdateAIState) {
+      onUpdateAIState({
+        ...aiState,
+        [key]: value
+      });
+      if (onShowToast) {
+        onShowToast(`Paramètre IA mis à jour dans Firebase.`, 'success');
+      }
+    }
+  };
+
+  const handleToggleAdCampaign = (campId: string) => {
+    if (aiState && onUpdateAIState) {
+      const updatedCampaigns = aiState.adCampaigns.map(camp => {
+        if (camp.id === campId) {
+          const nextStatus = (camp.status === 'active' ? 'paused' : 'active') as 'active' | 'paused';
+          return { ...camp, status: nextStatus };
+        }
+        return camp;
+      });
+      onUpdateAIState({
+        ...aiState,
+        adCampaigns: updatedCampaigns
+      });
+      if (onShowToast) {
+        onShowToast(`Campagne publicitaire mise en pause / activée.`, 'info');
+      }
+    }
+  };
+
+  const handleAdjustAdBudget = (campId: string, amount: number) => {
+    if (aiState && onUpdateAIState) {
+      const updatedCampaigns = aiState.adCampaigns.map(camp => {
+        if (camp.id === campId) {
+          return { ...camp, budget: Math.max(1000, camp.budget + amount) };
+        }
+        return camp;
+      });
+      onUpdateAIState({
+        ...aiState,
+        adCampaigns: updatedCampaigns
+      });
+    }
+  };
+
+  const handleToggleMarketingCampaign = (mktId: string) => {
+    if (aiState && onUpdateAIState) {
+      const updatedMarketing = aiState.marketingCampaigns.map(mkt => {
+        if (mkt.id === mktId) {
+          const nextStatus = (mkt.status === 'active' ? 'inactive' : 'active') as 'active' | 'inactive';
+          return { ...mkt, status: nextStatus };
+        }
+        return mkt;
+      });
+      onUpdateAIState({
+        ...aiState,
+        marketingCampaigns: updatedMarketing
+      });
+    }
+  };
+
+  const handlePricingDecisionAction = async (decisionId: string, action: 'approve' | 'reject' | 'rollback') => {
+    if (!aiState || !onUpdateAIState) return;
+
+    const decision = aiState.pricingDecisions.find(d => d.id === decisionId);
+    if (!decision) return;
+
+    let updatedDecisions = [...aiState.pricingDecisions];
+
+    if (action === 'approve') {
+      const prodIndex = products.findIndex(p => p.id === decision.productId);
+      if (prodIndex !== -1) {
+        const prod = products[prodIndex];
+        const updatedProd = { ...prod, price: decision.newPrice, originalPrice: prod.originalPrice || prod.price };
+        if (onUpdateProduct) {
+          await onUpdateProduct(updatedProd);
+        }
+      }
+      
+      updatedDecisions = aiState.pricingDecisions.map(d => 
+        d.id === decisionId ? { ...d, status: 'applied' as const } : d
+      );
+      if (onShowToast) onShowToast('Tarif validé avec succès ! Appliqué sur la boutique.', 'success');
+
+    } else if (action === 'reject') {
+      updatedDecisions = aiState.pricingDecisions.map(d => 
+        d.id === decisionId ? { ...d, status: 'rejected' as const } : d
+      );
+      if (onShowToast) onShowToast('Suggestion de prix rejetée.', 'info');
+
+    } else if (action === 'rollback') {
+      const prodIndex = products.findIndex(p => p.id === decision.productId);
+      if (prodIndex !== -1) {
+        const prod = products[prodIndex];
+        const updatedProd = { ...prod, price: decision.oldPrice };
+        if (onUpdateProduct) {
+          await onUpdateProduct(updatedProd);
+        }
+      }
+
+      updatedDecisions = aiState.pricingDecisions.map(d => 
+        d.id === decisionId ? { ...d, status: 'rolled_back' as const } : d
+      );
+      if (onShowToast) onShowToast('Rollback effectué. Le produit a repris son ancien prix.', 'info');
+    }
+
+    onUpdateAIState({
+      ...aiState,
+      pricingDecisions: updatedDecisions
+    });
+  };
+
+  const triggerAIOptimization = async () => {
+    if (!onRunAISimulation) return;
+    setIsRunningSimulation(true);
+    try {
+      const logs = await onRunAISimulation();
+      setSimulationLogs(prev => [...logs, ...prev].slice(0, 50));
+      if (onShowToast) {
+        onShowToast('Cycle d\'optimisation IA simulé avec succès.', 'success');
+      }
+    } catch (e) {
+      console.error(e);
+      if (onShowToast) {
+        onShowToast('Erreur lors du cycle IA.', 'error');
+      }
+    } finally {
+      setIsRunningSimulation(false);
+    }
+  };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -359,7 +510,7 @@ export default function AdminPanel({
         </div>
         
         {/* Navigation Tabs */}
-        <div className="inline-flex gap-1.5 p-1.5 bg-slate-100 rounded-2xl self-start">
+        <div className="inline-flex flex-wrap gap-1.5 p-1.5 bg-slate-100 rounded-2xl self-start">
           <button
             onClick={() => setActiveTab('dashboard')}
             className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${activeTab === 'dashboard' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
@@ -377,6 +528,13 @@ export default function AdminPanel({
             className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer  ${activeTab === 'orders' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
           >
             Dossier Commandes ({orders.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('ai_control')}
+            className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${activeTab === 'ai_control' ? 'bg-[#0052FF]/10 text-[#0052FF] font-extrabold shadow-xs' : 'text-slate-600 hover:text-[#0052FF]'}`}
+          >
+            <Brain className="w-3.5 h-3.5" />
+            <span>Pilotage IA 🧠</span>
           </button>
           <button
             onClick={() => setActiveTab('settings')}
@@ -1339,6 +1497,707 @@ export default function AdminPanel({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'ai_control' && aiState && (
+        <div className="space-y-8 animate-fade-in">
+          {/* AI Banner */}
+          <div className="relative overflow-hidden rounded-3xl bg-slate-900 border border-slate-800 p-6 md:p-8 text-white shadow-xl">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-[radial-gradient(circle_at_top_right,rgba(0,82,255,0.15),transparent)] pointer-events-none"></div>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10">
+              <div className="space-y-2">
+                <div className="inline-flex items-center gap-2 bg-[#0052FF]/20 text-sky-400 font-extrabold text-[10px] uppercase tracking-widest px-3 py-1 rounded-full border border-sky-500/20">
+                  <Sparkles className="w-3.5 h-3.5 animate-pulse text-sky-400" />
+                  <span>Moteur de Décision Autonome Univers Shop</span>
+                </div>
+                <h3 className="text-2xl font-display font-black tracking-tight">AI Suite & Profit Optimization Layer</h3>
+                <p className="text-slate-400 text-sm max-w-2xl">
+                  Pilotez votre boutique e-commerce à 100% grâce à l'intelligence artificielle. Tarification dynamique, gestion automatisée des budgets publicitaires, marketing prédictif et optimisation en boucle fermée du profit net.
+                </p>
+              </div>
+              
+              <div className="flex items-center gap-4 bg-slate-800/80 p-4 rounded-2xl border border-slate-700/50 self-stretch md:self-auto justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Statut Général IA</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-3.5 h-3.5 rounded-full ${aiState.enabled ? 'bg-emerald-500 animate-ping' : 'bg-rose-500'}`}></span>
+                    <span className={`w-3.5 h-3.5 rounded-full absolute ${aiState.enabled ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+                    <span className="text-xs font-black uppercase tracking-wide ml-2">{aiState.enabled ? 'ACTIF (En ligne)' : 'INACTIF (Désactivé)'}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => updateAISuiteParam('enabled', !aiState.enabled)}
+                  className={`px-4 py-2 text-xs font-bold rounded-xl cursor-pointer transition-all ${
+                    aiState.enabled 
+                      ? 'bg-rose-500/15 text-rose-400 border border-rose-500/25 hover:bg-rose-500/25' 
+                      : 'bg-[#0052FF] text-white hover:bg-[#003BCC]'
+                  }`}
+                >
+                  {aiState.enabled ? 'Désactiver' : 'Activer'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Real-time Business KPI Control Dashboard & Alerts */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs relative overflow-hidden">
+              <div className="flex justify-between items-start mb-4">
+                <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
+                  <DollarSign className="w-6 h-6" />
+                </div>
+                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md font-sans">Ventes Optimisées IA</span>
+              </div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Chiffre d'Affaires</p>
+              <h4 className="text-2xl font-display font-black text-slate-900">
+                {(aiState.historicalStats[aiState.historicalStats.length - 1]?.revenue || 0).toLocaleString()} DA
+              </h4>
+              <p className="text-[10px] text-emerald-600 mt-2 font-bold">
+                ▲ +14% par rapport à hier
+              </p>
+            </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs relative overflow-hidden">
+              <div className="flex justify-between items-start mb-4">
+                <div className="p-3 bg-sky-50 text-sky-600 rounded-2xl">
+                  <Megaphone className="w-6 h-6" />
+                </div>
+                <span className="text-[10px] font-bold text-sky-600 bg-sky-50 px-2 py-1 rounded-md font-sans">Budget Publicitaire</span>
+              </div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Dépense Pub Totale</p>
+              <h4 className="text-2xl font-display font-black text-slate-900">
+                {aiState.adCampaigns.reduce((sum, c) => sum + (c.status === 'active' ? c.budget : 0), 0).toLocaleString()} DA
+              </h4>
+              <p className="text-[10px] text-slate-500 mt-2 font-medium">
+                Réalloué dynamiquement
+              </p>
+            </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs relative overflow-hidden">
+              <div className="flex justify-between items-start mb-4">
+                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+                  <Percent className="w-6 h-6" />
+                </div>
+                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md font-sans">Conversion Client</span>
+              </div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Taux de Conversion</p>
+              <h4 className="text-2xl font-display font-black text-slate-900">
+                {aiState.historicalStats[aiState.historicalStats.length - 1]?.conversionRate || 3.5}%
+              </h4>
+              <p className="text-[10px] text-indigo-600 mt-2 font-bold">
+                Moyenne sectorielle : 1.8%
+              </p>
+            </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs relative overflow-hidden">
+              <div className="flex justify-between items-start mb-4">
+                <div className="p-3 bg-violet-50 text-violet-600 rounded-2xl">
+                  <Shield className="w-6 h-6" />
+                </div>
+                <span className="text-[10px] font-bold text-violet-600 bg-violet-50 px-2 py-1 rounded-md font-sans">Marge Nette Optimisée</span>
+              </div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Bénéfice Net Estimé</p>
+              <h4 className="text-2xl font-display font-black text-slate-900">
+                {(aiState.historicalStats[aiState.historicalStats.length - 1]?.profit || 0).toLocaleString()} DA
+              </h4>
+              <p className="text-[10px] text-violet-600 mt-2 font-bold">
+                Marge brute moyenne : 68%
+              </p>
+            </div>
+          </div>
+
+          {/* Simulated Control Loop Terminal & Action Center */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs lg:col-span-2 space-y-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-4 gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="p-2.5 bg-sky-50 text-[#0052FF] rounded-2xl text-lg">🤖</span>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Centre d'Exécution & Simulation IA</h3>
+                    <p className="text-slate-500 text-xs mt-0.5">Simulez des cycles d'activité client pour entraîner le modèle prédictif.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={triggerAIOptimization}
+                  disabled={isRunningSimulation || !aiState.enabled}
+                  className="bg-slate-950 hover:bg-slate-900 disabled:opacity-50 text-white font-bold text-xs px-5 py-3 rounded-xl transition-all cursor-pointer flex items-center gap-2 shadow-md shadow-slate-900/10 hover:scale-[1.02] active:scale-95"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isRunningSimulation ? 'animate-spin' : ''}`} />
+                  <span>{isRunningSimulation ? 'Optimisation en cours...' : 'Lancer un Cycle d\'Optimisation'}</span>
+                </button>
+              </div>
+
+              {/* Terminal Logs View */}
+              <div className="space-y-3">
+                <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider block">Terminal d'analyse IA en direct</span>
+                <div className="bg-slate-950 font-mono text-[11px] leading-relaxed text-slate-300 p-4 rounded-2xl h-64 overflow-y-auto border border-slate-900 shadow-inner space-y-2">
+                  <p className="text-sky-400 font-bold">{"[SYSTEM] INITIALIZING UNIVERS SHOP AI ENGINE..."}</p>
+                  <p className="text-slate-500">{"[INFO] Loading current active catalogs and order structures."}</p>
+                  <p className="text-emerald-400">{"[SUCCESS] Firestore real-time listener established with credentials."}</p>
+                  
+                  {simulationLogs.length === 0 ? (
+                    <p className="text-slate-500 italic">{"[TERMINAL CLOUD] Aucun log d'exécution récent. Cliquez sur \"Lancer un Cycle d'Optimisation\" ci-dessus pour simuler une optimisation du système."}</p>
+                  ) : (
+                    simulationLogs.map((log, idx) => {
+                      let color = 'text-slate-300';
+                      if (log.includes('Ajusté le prix')) color = 'text-amber-400 font-semibold';
+                      if (log.includes('Budget')) color = 'text-emerald-400 font-semibold';
+                      if (log.includes('mise en PAUSE')) color = 'text-rose-400 font-semibold';
+                      if (log.includes('Statut de')) color = 'text-sky-300';
+                      return (
+                        <p key={idx} className={color}>
+                          {`[CYCLE-${idx + 1}] ${log}`}
+                        </p>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Smart Alerts & Business Advisor */}
+            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs space-y-6">
+              <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+                <span className="p-2.5 bg-amber-50 text-amber-500 rounded-2xl text-lg"><Lightbulb className="w-5 h-5" /></span>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Recommandations IA</h3>
+                  <p className="text-slate-500 text-xs mt-0.5">Suggestions d'actions générées automatiquement.</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {/* Alert 1 */}
+                <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-100/50 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md uppercase tracking-wider font-sans">Ajustement Pub</span>
+                    <span className="text-[10px] text-slate-400 font-medium">Recommandé</span>
+                  </div>
+                  <p className="text-xs font-semibold text-slate-800 leading-snug">
+                    La campagne "Google Search" produit un ROI insuffisant (0.6x).
+                  </p>
+                  <p className="text-slate-500 text-[10px] leading-relaxed">
+                    Nous vous suggérons de couper cette campagne pour réinjecter ses 5 000 DA de budget sur "Instagram Story - Mode" qui culmine à un ROI exceptionnel de 4.1x.
+                  </p>
+                  <button
+                    onClick={async () => {
+                      if (aiState && onUpdateAIState) {
+                        const updated = aiState.adCampaigns.map(c => {
+                          if (c.id === 'camp-4') return { ...c, status: 'paused' as const, budget: 0 };
+                          if (c.id === 'camp-2') return { ...c, budget: c.budget + 5000 };
+                          return c;
+                        });
+                        onUpdateAIState({ ...aiState, adCampaigns: updated });
+                        if (onShowToast) onShowToast('Budget réalloué avec succès ! Campagne non rentable stoppée.', 'success');
+                      }
+                    }}
+                    className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold rounded-xl transition-all"
+                  >
+                    Réallouer le budget pub
+                  </button>
+                </div>
+
+                {/* Alert 2 */}
+                <div className="p-4 rounded-2xl bg-sky-50/50 border border-sky-100/50 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-md uppercase tracking-wider font-sans">Conversion</span>
+                    <span className="text-[10px] text-slate-400 font-medium">Auto-appliqué</span>
+                  </div>
+                  <p className="text-xs font-semibold text-slate-800 leading-snug">
+                    Pic d'abandons de paniers détecté entre 14h et 16h.
+                  </p>
+                  <p className="text-slate-500 text-[10px] leading-relaxed">
+                    Le module "Conversion Intelligence" a automatiquement activé une bannière d'urgence avec un compte à rebours de 15 minutes pour booster les checkouts hésitants.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Module 1: AI Dynamic Pricing Engine */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-4 gap-4">
+              <div className="flex items-center gap-3">
+                <span className="p-2.5 bg-amber-50 text-amber-500 rounded-2xl text-lg"><Sliders className="w-5 h-5" /></span>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">1. AI Dynamic Pricing Engine (Tarification Intelligente)</h3>
+                  <p className="text-slate-500 text-xs mt-0.5">Ajustement continu et prédictif des prix selon la demande réelle.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400 font-bold uppercase">Statut Module</span>
+                <button
+                  onClick={() => updateAISuiteParam('dynamicPricing', !aiState.dynamicPricing)}
+                  className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-all ${aiState.dynamicPricing ? 'bg-[#0052FF] justify-end' : 'bg-slate-300 justify-start'}`}
+                >
+                  <span className="bg-white w-4 h-4 rounded-full shadow-md"></span>
+                </button>
+              </div>
+            </div>
+
+            {aiState.dynamicPricing && (
+              <div className="space-y-6 animate-fade-in">
+                {/* Settings Inputs */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Strategy Selection */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Stratégie de Prix Principale</label>
+                    <select
+                      value={aiState.pricingStrategy}
+                      onChange={(e) => updateAISuiteParam('pricingStrategy', e.target.value as any)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#0052FF]/20"
+                    >
+                      <option value="balanced">Équilibré (Volume de Ventes & Marge)</option>
+                      <option value="profit">Maximisation de la Marge Nette</option>
+                      <option value="conversion">Volume maximal (Taux de Conversion)</option>
+                    </select>
+                  </div>
+
+                  {/* Safety Min Limit */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                      Seuil de Prix Minimum ({aiState.safetyMinPricePct}%)
+                    </label>
+                    <input
+                      type="range"
+                      min={50}
+                      max={95}
+                      step={5}
+                      value={aiState.safetyMinPricePct}
+                      onChange={(e) => updateAISuiteParam('safetyMinPricePct', Number(e.target.value))}
+                      className="w-full accent-[#0052FF] h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <p className="text-[10px] text-slate-400">Le prix ne sera jamais rabaissé sous {aiState.safetyMinPricePct}% du tarif initial.</p>
+                  </div>
+
+                  {/* Safety Max Limit */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                      Seuil de Prix Maximum ({aiState.safetyMaxPricePct}%)
+                    </label>
+                    <input
+                      type="range"
+                      min={105}
+                      max={180}
+                      step={5}
+                      value={aiState.safetyMaxPricePct}
+                      onChange={(e) => updateAISuiteParam('safetyMaxPricePct', Number(e.target.value))}
+                      className="w-full accent-[#0052FF] h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <p className="text-[10px] text-slate-400">Le prix ne sera jamais augmenté au-dessus de {aiState.safetyMaxPricePct}% du tarif initial.</p>
+                  </div>
+                </div>
+
+                {/* Validation Requirement */}
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                      <Shield className="w-4 h-4 text-[#0052FF]" />
+                      <span>Mode de Validation de Sécurité (Validation Humaine)</span>
+                    </h4>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Si activé, chaque ajustement proposé par l'IA doit être validé manuellement ci-dessous avant d'être publié.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => updateAISuiteParam('requireHumanValidation', !aiState.requireHumanValidation)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                      aiState.requireHumanValidation
+                        ? 'bg-[#0052FF] text-white border-[#0052FF]'
+                        : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                    }`}
+                  >
+                    {aiState.requireHumanValidation ? 'Validation Humaine : ACTIVE' : 'Ajustement direct : AUTONOME'}
+                  </button>
+                </div>
+
+                {/* Pricing Decisions Table / List */}
+                <div className="space-y-3">
+                  <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider block">Historique des Suggestions & Décisions de Prix</span>
+                  <div className="overflow-x-auto border border-slate-100 rounded-2xl">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-100 font-bold">
+                          <th className="py-3 px-4">Date</th>
+                          <th className="py-3 px-4">Produit</th>
+                          <th className="py-3 px-4 text-right">Ancien Prix</th>
+                          <th className="py-3 px-4 text-right text-[#0052FF]">Nouveau Prix</th>
+                          <th className="py-3 px-4">Justification IA</th>
+                          <th className="py-3 px-4">Statut</th>
+                          <th className="py-3 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                        {aiState.pricingDecisions.map((dec) => {
+                          let statusBadge = '';
+                          if (dec.status === 'applied') statusBadge = 'bg-emerald-50 text-emerald-700 border-emerald-100';
+                          if (dec.status === 'pending') statusBadge = 'bg-amber-50 text-amber-700 border-amber-100';
+                          if (dec.status === 'rejected') statusBadge = 'bg-rose-50 text-rose-700 border-rose-100';
+                          if (dec.status === 'rolled_back') statusBadge = 'bg-slate-100 text-slate-500 border-slate-200';
+
+                          return (
+                            <tr key={dec.id} className="hover:bg-slate-50/50 transition-colors">
+                              <td className="py-3.5 px-4 font-mono text-[10px] text-slate-400">
+                                {new Date(dec.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                              </td>
+                              <td className="py-3.5 px-4 font-bold text-slate-800">{dec.productName}</td>
+                              <td className="py-3.5 px-4 text-right font-mono text-slate-500">
+                                {dec.oldPrice > 0 ? `${dec.oldPrice.toLocaleString()} DA` : '-'}
+                              </td>
+                              <td className="py-3.5 px-4 text-right font-bold font-mono text-[#0052FF]">
+                                {dec.newPrice > 0 ? `${dec.newPrice.toLocaleString()} DA` : '-'}
+                              </td>
+                              <td className="py-3.5 px-4 text-slate-500 max-w-xs truncate" title={dec.reason}>
+                                {dec.reason}
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] border ${statusBadge}`}>
+                                  {dec.status === 'applied' && 'Appliqué'}
+                                  {dec.status === 'pending' && 'En Attente'}
+                                  {dec.status === 'rejected' && 'Rejeté'}
+                                  {dec.status === 'rolled_back' && 'Rétabli'}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4 text-right">
+                                {dec.status === 'pending' && (
+                                  <div className="inline-flex gap-2">
+                                    <button
+                                      onClick={() => handlePricingDecisionAction(dec.id, 'approve')}
+                                      className="px-2.5 py-1 bg-emerald-500 text-white hover:bg-emerald-600 rounded-lg text-[10px] font-bold cursor-pointer transition-all"
+                                    >
+                                      Approuver
+                                    </button>
+                                    <button
+                                      onClick={() => handlePricingDecisionAction(dec.id, 'reject')}
+                                      className="px-2.5 py-1 bg-rose-500 text-white hover:bg-rose-600 rounded-lg text-[10px] font-bold cursor-pointer transition-all"
+                                    >
+                                      Rejeter
+                                    </button>
+                                  </div>
+                                )}
+                                {dec.status === 'applied' && dec.productId !== 'all' && (
+                                  <button
+                                    onClick={() => handlePricingDecisionAction(dec.id, 'rollback')}
+                                    className="px-2.5 py-1 border border-rose-200 text-rose-600 hover:bg-rose-50 rounded-lg text-[10px] font-bold cursor-pointer transition-all"
+                                  >
+                                    Reverser (Rollback)
+                                  </button>
+                                )}
+                                {dec.status !== 'pending' && dec.status !== 'applied' && (
+                                  <span className="text-[10px] text-slate-400 font-semibold">-</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Module 2: AI Advertising Engine */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-4 gap-4">
+              <div className="flex items-center gap-3">
+                <span className="p-2.5 bg-sky-50 text-sky-600 rounded-2xl text-lg"><Megaphone className="w-5 h-5" /></span>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">2. AI Advertising Engine (Optimisation Budgets Pubs)</h3>
+                  <p className="text-slate-500 text-xs mt-0.5">Allocation automatique des budgets publicitaires vers les canaux les plus rentables.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400 font-bold uppercase">Statut Module</span>
+                <button
+                  onClick={() => updateAISuiteParam('autoAdvertising', !aiState.autoAdvertising)}
+                  className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-all ${aiState.autoAdvertising ? 'bg-[#0052FF] justify-end' : 'bg-slate-300 justify-start'}`}
+                >
+                  <span className="bg-white w-4 h-4 rounded-full shadow-md"></span>
+                </button>
+              </div>
+            </div>
+
+            {aiState.autoAdvertising && (
+              <div className="space-y-6 animate-fade-in">
+                {/* Active Ad Campaigns */}
+                <div className="overflow-x-auto border border-slate-100 rounded-2xl">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-100 font-bold">
+                        <th className="py-3 px-4">Campagne Pub active</th>
+                        <th className="py-3 px-4">Statut IA</th>
+                        <th className="py-3 px-4 text-right">Budget Alloué</th>
+                        <th className="py-3 px-4 text-right">Taux de Clic (CTR)</th>
+                        <th className="py-3 px-4 text-right">Ventes Générées</th>
+                        <th className="py-3 px-4 text-right">Coût par Achat (CPA)</th>
+                        <th className="py-3 px-4 text-right text-sky-600">Retour sur Invest. (ROI)</th>
+                        <th className="py-3 px-4 text-right">Actions Manuelles</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                      {aiState.adCampaigns.map((camp) => (
+                        <tr key={camp.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="py-3.5 px-4 font-bold text-slate-800">{camp.name}</td>
+                          <td className="py-3.5 px-4">
+                            <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] uppercase tracking-wide ${
+                              camp.status === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-100 text-slate-500 border border-slate-200'
+                            }`}>
+                              {camp.status === 'active' ? 'En Cours' : 'En Pause'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-mono font-semibold">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => handleAdjustAdBudget(camp.id, -1000)}
+                                className="w-5 h-5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold flex items-center justify-center rounded-sm text-xs cursor-pointer"
+                              >
+                                -
+                              </button>
+                              <span>{camp.budget.toLocaleString()} DA</span>
+                              <button
+                                onClick={() => handleAdjustAdBudget(camp.id, 1000)}
+                                className="w-5 h-5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold flex items-center justify-center rounded-sm text-xs cursor-pointer"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-mono font-medium">{camp.ctr}%</td>
+                          <td className="py-3.5 px-4 text-right font-mono">{camp.conversions}</td>
+                          <td className="py-3.5 px-4 text-right font-mono text-slate-500">{camp.cpa.toLocaleString()} DA</td>
+                          <td className="py-3.5 px-4 text-right font-bold font-mono text-sky-600">{camp.roi}x</td>
+                          <td className="py-3.5 px-4 text-right">
+                            <button
+                              onClick={() => handleToggleAdCampaign(camp.id)}
+                              className={`px-3 py-1 font-bold text-[10px] rounded-lg cursor-pointer transition-all ${
+                                camp.status === 'active'
+                                  ? 'bg-rose-50 text-rose-600 hover:bg-rose-100'
+                                  : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
+                              }`}
+                            >
+                              {camp.status === 'active' ? 'Mettre en pause' : 'Relancer la pub'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Module 3: AI Marketing Automation Layer & Module 6: Customer Intelligence */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* AI Marketing triggers */}
+            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs space-y-6">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-3">
+                  <span className="p-2.5 bg-violet-50 text-violet-600 rounded-2xl text-lg"><Percent className="w-5 h-5" /></span>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">3. AI Marketing Automation Layer</h3>
+                    <p className="text-slate-500 text-xs mt-0.5">Offres ciblées générées automatiquement selon les événements.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => updateAISuiteParam('marketingAutomation', !aiState.marketingAutomation)}
+                  className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-all ${aiState.marketingAutomation ? 'bg-[#0052FF] justify-end' : 'bg-slate-300 justify-start'}`}
+                >
+                  <span className="bg-white w-4 h-4 rounded-full shadow-md"></span>
+                </button>
+              </div>
+
+              {aiState.marketingAutomation && (
+                <div className="space-y-4 animate-fade-in">
+                  {aiState.marketingCampaigns.map((mkt) => (
+                    <div key={mkt.id} className="p-4 rounded-2xl border border-slate-100 flex justify-between items-center hover:shadow-xs transition-shadow">
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Trigger : {mkt.trigger}</span>
+                        <h4 className="text-sm font-bold text-slate-800">{mkt.name}</h4>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500">Promotion :</span>
+                          <span className="text-xs font-black font-mono text-violet-600">-{mkt.discount}% de réduction</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-semibold text-slate-500">{mkt.status === 'active' ? 'Activé' : 'Désactivé'}</span>
+                        <button
+                          onClick={() => handleToggleMarketingCampaign(mkt.id)}
+                          className={`w-10 h-5 flex items-center rounded-full p-0.5 cursor-pointer transition-all ${mkt.status === 'active' ? 'bg-[#0052FF] justify-end' : 'bg-slate-300 justify-start'}`}
+                        >
+                          <span className="bg-white w-4 h-4 rounded-full shadow-xs"></span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Customer Intelligence Engine */}
+            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs space-y-6">
+              <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+                <span className="p-2.5 bg-emerald-50 text-emerald-600 rounded-2xl text-lg"><User className="w-5 h-5" /></span>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">6. Customer Intelligence Engine</h3>
+                  <p className="text-slate-500 text-xs mt-0.5">Segmentation prédictive et recommandations automatiques.</p>
+                </div>
+              </div>
+
+              <div className="space-y-5">
+                {/* Segment 1 */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-bold text-slate-800">Clients Hésitants (Abandons de panier potentiels)</span>
+                    <span className="font-mono text-slate-500 font-bold">40% d'audience</span>
+                  </div>
+                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-amber-500 rounded-full" style={{ width: '40%' }}></div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 italic leading-relaxed font-sans">
+                    🎯 Recommandation IA : Retargeting panier automatique activé. Relance de réduction de -15% après 30 secondes d'inactivité.
+                  </p>
+                </div>
+
+                {/* Segment 2 */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-bold text-slate-800">Nouveaux Visiteurs (Froid)</span>
+                    <span className="font-mono text-slate-500 font-bold">35% d'audience</span>
+                  </div>
+                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-sky-500 rounded-full" style={{ width: '35%' }}></div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 italic leading-relaxed font-sans">
+                    🎯 Recommandation IA : Offre de bienvenue active. Réduction immédiate de -5% proposée à l'arrivée pour déclencher la 1ère commande.
+                  </p>
+                </div>
+
+                {/* Segment 3 */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-bold text-slate-800">Acheteurs Réguliers & Ambassadeurs</span>
+                    <span className="font-mono text-slate-500 font-bold">20% d'audience</span>
+                  </div>
+                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: '20%' }}></div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 italic leading-relaxed font-sans">
+                    🎯 Recommandation IA : Programme fidélité automatique en cours d'attribution. Doublement des points de fidélité pour maintenir l'engagement.
+                  </p>
+                </div>
+
+                {/* Segment 4 */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-bold text-slate-800">Clients VIP à Haute Valeur Ajoutée</span>
+                    <span className="font-mono text-slate-500 font-bold">5% d'audience</span>
+                  </div>
+                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-violet-500 rounded-full" style={{ width: '5%' }}></div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 italic leading-relaxed font-sans">
+                    🎯 Recommandation IA : Recommandations ultra-personnalisées basées sur l'historique d'achat. Accès anticipé aux ventes privées.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Module 4: Conversion Intelligence & Module 5: Profit Optimization Loop */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs space-y-6">
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+              <span className="p-2.5 bg-[#0052FF]/10 text-[#0052FF] rounded-2xl text-lg"><BarChart3 className="w-5 h-5" /></span>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">4. Conversion Intelligence & 5. Profit Optimization Loop</h3>
+                <p className="text-slate-500 text-xs mt-0.5">Suivi de la performance globale et apprentissage autonome en boucle continue.</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Funnel visualization */}
+              <div className="space-y-4">
+                <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider block">Entonnoir de Conversion Optimisé en Temps Réel</span>
+                <div className="space-y-3">
+                  {/* Step 1 */}
+                  <div className="p-3 bg-slate-50/70 border border-slate-100 rounded-xl flex justify-between items-center text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 bg-slate-900 text-white rounded-full flex items-center justify-center font-bold text-[10px]">1</span>
+                      <span className="font-bold text-slate-800 font-sans">Visites sur la Boutique</span>
+                    </div>
+                    <span className="font-mono font-bold text-slate-500">100% (12 400 visiteurs)</span>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className="p-3 bg-slate-50/70 border border-slate-100 rounded-xl flex justify-between items-center text-xs w-[92%]">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 bg-slate-800 text-white rounded-full flex items-center justify-center font-bold text-[10px]">2</span>
+                      <span className="font-bold text-slate-800 font-sans">Ajouts au Panier</span>
+                    </div>
+                    <span className="font-mono font-bold text-sky-600">32% (3 968 utilisateurs)</span>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className="p-3 bg-slate-50/70 border border-slate-100 rounded-xl flex justify-between items-center text-xs w-[84%]">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 bg-slate-700 text-white rounded-full flex items-center justify-center font-bold text-[10px]">3</span>
+                      <span className="font-bold text-slate-800 font-sans">Initiation du Checkout</span>
+                    </div>
+                    <span className="font-mono font-bold text-indigo-600">14.5% (1 798 checkouts)</span>
+                  </div>
+
+                  {/* Step 4 */}
+                  <div className="p-3 bg-[#0052FF]/5 border border-[#0052FF]/10 rounded-xl flex justify-between items-center text-xs w-[76%]">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 bg-[#0052FF] text-white rounded-full flex items-center justify-center font-bold text-[10px]">4</span>
+                      <span className="font-bold text-[#0052FF] font-sans">Commandes Confirmées (Optimisé par l'IA)</span>
+                    </div>
+                    <span className="font-mono font-bold text-[#0052FF]">{aiState.historicalStats[aiState.historicalStats.length - 1]?.conversionRate || 3.5}% (434 ventes)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Loop trend graph representation */}
+              <div className="space-y-4">
+                <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider block">Boucle d'Apprentissage Continu (Chiffre d'Affaires vs Profit Net)</span>
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 h-52 flex flex-col justify-between">
+                  <div className="flex items-end justify-between h-36 pt-4 px-2">
+                    {aiState.historicalStats.map((stat, idx) => {
+                      const maxRevenue = Math.max(...aiState.historicalStats.map(s => s.revenue), 100000);
+                      const revenueHeight = `${(stat.revenue / maxRevenue) * 100}%`;
+                      const profitHeight = `${(stat.profit / maxRevenue) * 100}%`;
+
+                      return (
+                        <div key={idx} className="flex flex-col items-center gap-1.5 h-full justify-end w-8">
+                          <div className="flex items-end gap-1 h-full w-full justify-center">
+                            {/* Revenue Bar */}
+                            <div className="bg-sky-400/80 w-2.5 rounded-t-sm transition-all duration-500 hover:opacity-100 opacity-80" style={{ height: revenueHeight }} title={`Revenue: ${stat.revenue.toLocaleString()} DA`}></div>
+                            {/* Profit Bar */}
+                            <div className="bg-[#0052FF] w-2.5 rounded-t-sm transition-all duration-500" style={{ height: profitHeight }} title={`Profit: ${stat.profit.toLocaleString()} DA`}></div>
+                          </div>
+                          <span className="text-[9px] font-bold text-slate-400 block truncate max-w-[32px]">{stat.date}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  <div className="flex justify-center gap-6 border-t border-slate-200/60 pt-2 text-[10px] font-bold">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 bg-sky-400 rounded-full"></span>
+                      <span className="text-slate-500 font-sans">Chiffre d'Affaires</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 bg-[#0052FF] rounded-full"></span>
+                      <span className="text-slate-500 font-sans">Marge Nette (Bénéfice)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

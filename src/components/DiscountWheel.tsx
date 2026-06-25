@@ -12,6 +12,7 @@ const SECTORS = [
   { label: '-10% sur tout', code: 'ROUE10', type: 'percentage', value: 10, color: '#0369A1' }, // Sky Blue
   { label: '-500 DA direct', code: 'ROUE500', type: 'fixed', value: 500, color: '#D97706' }, // Amber Gold
   { label: 'Cadeau Surprise 🎁', code: 'ROUECADEAU', type: 'fixed', value: 1, color: '#B45309' }, // Warm Orange
+  { label: 'Rien à gagner 😢', code: 'ROUENOTHING', type: 'percentage', value: 0, color: '#475569' }, // Slate Gray
   { label: '-5% sur tout', code: 'ROUE5', type: 'percentage', value: 5, color: '#6366F1' }, // Indigo
   { label: 'Livraison -50%', code: 'ROUE50LIV', type: 'percentage', value: 50, color: '#7C3AED' } // Violet
 ];
@@ -114,11 +115,14 @@ export default function DiscountWheel({ onApplyPromo, onShowToast, onCompleteQue
       localStorage.setItem('univers_shop_wheel_spun', 'true');
       localStorage.setItem('univers_shop_wheel_prize', prize.label);
       
-      // Inject the code into the client checkout promo code system
-      onApplyPromo(prize.code, prize.type as 'percentage' | 'fixed', prize.value);
-      
-      playSuccessSound();
-      onShowToast(`🎉 Félicitations ! Vous avez gagné : ${prize.label}. Le code promo "${prize.code}" a été appliqué !`, 'success');
+      if (prize.code !== 'ROUENOTHING') {
+        // Inject the code into the client checkout promo code system
+        onApplyPromo(prize.code, prize.type as 'percentage' | 'fixed', prize.value);
+        playSuccessSound();
+        onShowToast(`🎉 Félicitations ! Vous avez gagné : ${prize.label}. Le code promo "${prize.code}" a été appliqué !`, 'success');
+      } else {
+        onShowToast(`😢 Dommage ! Pas de chance ce coup-ci : ${prize.label}. Retentez votre chance plus tard !`, 'info');
+      }
     }, 4000);
   };
 
@@ -177,8 +181,8 @@ export default function DiscountWheel({ onApplyPromo, onShowToast, onCompleteQue
               <div 
                 className="w-64 h-64 sm:w-72 sm:h-72 rounded-full border-8 border-slate-900 shadow-2xl relative overflow-hidden transition-transform ease-out duration-[4000ms]"
                 style={{ 
-                  transform: `rotate(${rotation}deg)`,
-                  transitionTimingFunction: 'cubic-bezier(0.1, 0.8, 0.1, 1)'
+                   transform: `rotate(${rotation}deg)`,
+                   transitionTimingFunction: 'cubic-bezier(0.1, 0.8, 0.1, 1)'
                 }}
               >
                 {/* SVG Sectors */}
@@ -214,7 +218,7 @@ export default function DiscountWheel({ onApplyPromo, onShowToast, onCompleteQue
                           x={textX}
                           y={textY}
                           fill="#ffffff"
-                          fontSize="3"
+                          fontSize="2.5"
                           fontWeight="black"
                           textAnchor="middle"
                           transform={`rotate(${textRotation}, ${textX}, ${textY})`}
@@ -245,6 +249,18 @@ export default function DiscountWheel({ onApplyPromo, onShowToast, onCompleteQue
                 >
                   {isSpinning ? '🎰 Tirage surprise...' : '🔥 Tourner la Roue !'}
                 </button>
+              ) : wonPrize === 'Rien à gagner 😢' ? (
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center space-y-2">
+                  <div className="flex items-center justify-center gap-1 text-slate-700 text-xs font-extrabold uppercase">
+                    <span>Pas de chance... 😢</span>
+                  </div>
+                  <p className="text-slate-800 text-sm font-black">
+                    "Rien à gagner cette fois !"
+                  </p>
+                  <p className="text-[11px] text-slate-500 leading-normal">
+                    Mince ! La roue s'est arrêtée sur la case perdante. Mais ne vous inquiétez pas, vous pouvez tout de même profiter de nos tarifs intelligents ajustés en continu !
+                  </p>
+                </div>
               ) : (
                 <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-center space-y-2">
                   <div className="flex items-center justify-center gap-1 text-emerald-800 text-xs font-extrabold uppercase">

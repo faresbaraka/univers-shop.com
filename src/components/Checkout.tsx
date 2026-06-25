@@ -13,7 +13,8 @@ import {
   Smartphone, 
   ArrowRight, 
   TrendingUp, 
-  AlertCircle 
+  AlertCircle,
+  Calendar
 } from 'lucide-react';
 import { CartItem, PaymentMethod, Order, StoreSettings } from '../types';
 import { ALGERIAN_WILAYAS } from '../data/mockProducts';
@@ -46,6 +47,13 @@ export default function Checkout({
   const [address, setAddress] = useState('');
   const [selectedWilayaCode, setSelectedWilayaCode] = useState<number>(16); // Alger default
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('delivery');
+
+  // Delivery Preferences
+  const [deliveryDate, setDeliveryDate] = useState(() => {
+    const defaultDate = new Date(Date.now() + 86400000 * 2);
+    return defaultDate.toISOString().split('T')[0];
+  });
+  const [deliveryTimeSlot, setDeliveryTimeSlot] = useState('morning');
 
   // Anti-fraud and Bot protection states
   const [isHumanVerified, setIsHumanVerified] = useState(false);
@@ -458,7 +466,9 @@ export default function Checkout({
       }),
       receiptScreenshot: paymentMethod === 'baridimob' ? receiptImg : undefined,
       cardLastFour: paymentMethod === 'edahabia' ? (cardNumber ? cardNumber.slice(-4) : 'API') : undefined,
-      otpVerified: paymentMethod === 'edahabia'
+      otpVerified: paymentMethod === 'edahabia',
+      deliveryDate: deliveryDate,
+      deliveryTimeSlot: deliveryTimeSlot === 'morning' ? 'Matin (09:00 - 12:00)' : deliveryTimeSlot === 'afternoon' ? 'Après-midi (13:00 - 17:00)' : 'Soir (17:00 - 20:00)'
     };
 
     setOrderReceipt(finalOrder);
@@ -622,6 +632,50 @@ export default function Checkout({
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
                 ></textarea>
                 {errors.address && <p className="text-rose-500 text-xs font-semibold mt-1">{errors.address}</p>}
+              </div>
+
+              {/* Preferred Delivery Date Selection */}
+              <div className="bg-slate-50 border border-slate-150 rounded-2xl p-4 space-y-3 font-sans">
+                <div className="flex items-center gap-2 text-slate-800">
+                  <Calendar className="w-4.5 h-4.5 text-[#0052FF]" />
+                  <span className="text-xs font-black uppercase tracking-wider">
+                    {language === 'ar' ? 'تاريخ التوصيل المفضل' : 'Date de Livraison Souhaitée'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  {language === 'ar' 
+                    ? 'اختر التاريخ والوقت المناسبين لك للاستلام.' 
+                    : 'Sélectionnez le jour idéal pour recevoir votre colis.'}
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                      {language === 'ar' ? 'التاريخ المفضل *' : 'Date d\'expédition souhaitée *'}
+                    </label>
+                    <input 
+                      type="date"
+                      required
+                      min={new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0]} // Min 2 days from now
+                      value={deliveryDate}
+                      onChange={(e) => setDeliveryDate(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0052FF]/10"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                      {language === 'ar' ? 'فترة التوصيل المفضلة' : 'Créneau horaire préféré'}
+                    </label>
+                    <select
+                      value={deliveryTimeSlot}
+                      onChange={(e) => setDeliveryTimeSlot(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0052FF]/10"
+                    >
+                      <option value="morning">{language === 'ar' ? 'صباحاً (09:00 - 12:00)' : 'Matin (09:00 - 12:00)'}</option>
+                      <option value="afternoon">{language === 'ar' ? 'بعد الظهر (13:00 - 17:00)' : 'Après-midi (13:00 - 17:00)'}</option>
+                      <option value="evening">{language === 'ar' ? 'مساءً (17:00 - 20:00)' : 'Soir (17:00 - 20:00)'}</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
               {/* Anti-bot Honeypot Input (Invisible to humans) */}

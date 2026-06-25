@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShoppingCart, ShieldCheck, Heart, Share2, Star, Award, TrendingUp } from 'lucide-react';
+import { ShoppingCart, ShieldCheck, Heart, Share2, Star, Award, TrendingUp, Sliders } from 'lucide-react';
 import { Product } from '../types';
 import { Language, translate } from '../lib/translations';
 

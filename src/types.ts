@@ -45,6 +45,8 @@ export interface Order {
   returnReason?: string;
   returnDate?: string;
   adminReturnNotes?: string;
+  deliveryDate?: string;
+  deliveryTimeSlot?: string;
 }
 
 export interface Wilaya {
@@ -63,4 +65,59 @@ export interface StoreSettings {
   promoCode?: string;
   promoDiscountType?: 'percentage' | 'fixed';
   promoDiscountValue?: number;
+}
+
+export interface AICampaign {
+  id: string;
+  name: string;
+  budget: number;
+  ctr: number;
+  conversions: number;
+  cpa: number;
+  roi: number;
+  status: 'active' | 'paused';
+}
+
+export interface AIDecision {
+  id: string;
+  productId: string;
+  productName: string;
+  oldPrice: number;
+  newPrice: number;
+  reason: string;
+  date: string;
+  status: 'applied' | 'pending' | 'rolled_back' | 'rejected';
+}
+
+export interface AIMarketingCampaign {
+  id: string;
+  name: string;
+  trigger: string;
+  status: 'active' | 'inactive';
+  discount: number;
+}
+
+export interface AIHistoricalStats {
+  date: string;
+  revenue: number;
+  adSpend: number;
+  conversionRate: number;
+  profit: number;
+}
+
+export interface AISuiteState {
+  enabled: boolean;
+  dynamicPricing: boolean;
+  pricingStrategy: 'profit' | 'conversion' | 'balanced';
+  safetyMinPricePct: number;
+  safetyMaxPricePct: number;
+  requireHumanValidation: boolean;
+  autoAdvertising: boolean;
+  marketingAutomation: boolean;
+  conversionIntelligence: boolean;
+  profitLoopEnabled: boolean;
+  adCampaigns: AICampaign[];
+  pricingDecisions: AIDecision[];
+  marketingCampaigns: AIMarketingCampaign[];
+  historicalStats: AIHistoricalStats[];
 }

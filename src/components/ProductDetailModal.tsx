@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Star, ShieldCheck, Heart, Share2, Eye, ShoppingCart, 
-  Play, Award, ArrowRight, User, ThumbsUp, Send, CheckCircle2 
+  Play, Award, ArrowRight, User, ThumbsUp, Send, CheckCircle2
 } from 'lucide-react';
 import { Product } from '../types';
 import { Language, translate } from '../lib/translations';
@@ -377,26 +377,31 @@ export default function ProductDetailModal({
 
               {/* BIG CONVERSION BUY ACTION BUTTON */}
               <div className="pt-2">
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => {
-                    onAddToCart(product);
-                    onShowToast?.(
-                      language === 'ar' ? "تمت إضافة المنتج إلى سلتك!" : "Produit ajouté à votre panier !",
-                      "success"
-                    );
-                  }}
-                  disabled={product.stock <= 0}
-                  className={`w-full py-4 rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg flex items-center justify-center gap-2.5 transition-all cursor-pointer ${
-                    product.stock <= 0
-                      ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                      : 'bg-[#0052FF] hover:bg-sky-600 text-white shadow-[#0052FF]/20 animate-pulse hover:animate-none'
-                  }`}
-                >
-                  <ShoppingCart className="w-4 h-4 text-white" />
-                  <span>{translate('buy_now', language)}</span>
-                </motion.button>
+                {product.stock <= 0 ? (
+                  <button
+                    disabled
+                    className="w-full py-4 rounded-2xl text-xs font-black uppercase tracking-wider bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <X className="w-4 h-4" />
+                    <span>{translate('out_of_stock', language) || (language === 'ar' ? 'غير متوفر' : 'Rupture de stock')}</span>
+                  </button>
+                ) : (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      onAddToCart(product);
+                      onShowToast?.(
+                        language === 'ar' ? "تمت إضافة المنتج إلى سلتك!" : "Produit ajouté à votre panier !",
+                        "success"
+                      );
+                    }}
+                    className="w-full py-4 rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg flex items-center justify-center gap-2.5 transition-all cursor-pointer bg-[#0052FF] hover:bg-sky-600 text-white shadow-[#0052FF]/20 animate-pulse hover:animate-none"
+                  >
+                    <ShoppingCart className="w-4 h-4 text-white" />
+                    <span>{translate('buy_now', language)}</span>
+                  </motion.button>
+                )}
               </div>
 
             </div>
