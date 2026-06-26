@@ -130,15 +130,24 @@ const INITIAL_ORDERS: Order[] = [
   }
 ];
 
+// Define the exact set of default/template mock product IDs to filter out,
+// so that ONLY the seller's custom-added products are displayed in the shop.
+const DEMO_PRODUCT_IDS = new Set(['prod-1', 'prod-2', 'prod-3', 'prod-4', 'prod-5', 'prod-6', 'prod-7', 'prod-8', 'prod-9']);
+
 export default function App() {
   // Products state (persisted on Firestore with localStorage as instant fast-loading fallback)
   const [products, setProducts] = useState<Product[]>(() => {
     try {
       const saved = localStorage.getItem('univers_shop_products');
-      return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+      if (saved) {
+        const parsed = JSON.parse(saved) as Product[];
+        // Filter out any default template mock product IDs to keep the catalog clean
+        return parsed.filter(p => !DEMO_PRODUCT_IDS.has(p.id));
+      }
+      return [];
     } catch (e) {
       console.warn("Could not parse products from localstorage:", e);
-      return INITIAL_PRODUCTS;
+      return [];
     }
   });
 
@@ -146,10 +155,10 @@ export default function App() {
   const [orders, setOrders] = useState<Order[]>(() => {
     try {
       const saved = localStorage.getItem('univers_shop_orders');
-      return saved ? JSON.parse(saved) : INITIAL_ORDERS;
+      return saved ? JSON.parse(saved) : [];
     } catch (e) {
       console.warn("Could not parse orders from localstorage:", e);
-      return INITIAL_ORDERS;
+      return [];
     }
   });
 
@@ -459,27 +468,41 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // One-time migration of offline products/orders from localStorage to Firestore
+  // One-time migration and cleanup of any existing demo products from Firestore
   useEffect(() => {
-    const migrateData = async () => {
+    const cleanAndMigrate = async () => {
       try {
+        // 1. Force Active Cleanup of Predefined Demo Products from Firestore
+        const cleanedKey = 'univers_shop_demo_cleaned_v1';
+        if (!localStorage.getItem(cleanedKey)) {
+          const demoIds = ['prod-1', 'prod-2', 'prod-3', 'prod-4', 'prod-5', 'prod-6'];
+          for (const id of demoIds) {
+            try {
+              await deleteDoc(doc(db, 'products', id));
+            } catch (e) {
+              console.warn('Failed to delete demo product on cleanup:', id, e);
+            }
+          }
+          localStorage.setItem(cleanedKey, 'true');
+        }
+
         const migratedKey = 'univers_shop_migrated_v2';
         if (localStorage.getItem(migratedKey)) return;
 
-        // 1. Migrate Products
+        // 2. Migrate Products (only user's custom products)
         const savedProductsStr = localStorage.getItem('univers_shop_products');
         if (savedProductsStr) {
           const localProducts = JSON.parse(savedProductsStr) as Product[];
           if (Array.isArray(localProducts)) {
             const initialIds = new Set(INITIAL_PRODUCTS.map(p => p.id));
-            const customProducts = localProducts.filter(p => !initialIds.has(p.id));
+            const customProducts = localProducts.filter(p => !initialIds.has(p.id) && !DEMO_PRODUCT_IDS.has(p.id));
             for (const p of customProducts) {
               await setDoc(doc(db, 'products', p.id), p);
             }
           }
         }
 
-        // 2. Migrate Orders
+        // 3. Migrate Orders
         const savedOrdersStr = localStorage.getItem('univers_shop_orders');
         if (savedOrdersStr) {
           const localOrders = JSON.parse(savedOrdersStr) as Order[];
@@ -494,10 +517,10 @@ export default function App() {
 
         localStorage.setItem(migratedKey, 'true');
       } catch (err) {
-        console.warn('Warning during data migration to Firestore:', err);
+        console.warn('Warning during data migration/cleanup:', err);
       }
     };
-    migrateData();
+    cleanAndMigrate();
   }, []);
 
   // Load and listen to Products & Orders in Firestore in real-time
@@ -538,21 +561,10 @@ export default function App() {
         } as Product);
       });
       
-      // If collection is completely empty, seed standard products
-      if (prodsList.length === 0 && INITIAL_PRODUCTS.length > 0) {
-        setProducts(INITIAL_PRODUCTS);
-        INITIAL_PRODUCTS.forEach(async (p) => {
-          try {
-            await setDoc(doc(db, 'products', p.id), p);
-          } catch (e) {
-            console.warn('Seeding product failed or under quota:', p.id, e);
-          }
-        });
-      } else {
-        // Sort products by creation date descending
-        prodsList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setProducts(prodsList);
-      }
+      // Sort products by creation date descending and filter out any default demo products to ensure only your items are displayed
+      prodsList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const cleanList = prodsList.filter(p => !DEMO_PRODUCT_IDS.has(p.id));
+      setProducts(cleanList);
     }, (error) => {
       console.warn('Error reading live products (Falling back to Local Storage due to quota):', error);
       setIsOfflineMode(true);
@@ -600,21 +612,9 @@ export default function App() {
         } as Order);
       });
       
-      // If collection is empty, seed standard orders for dashboard
-      if (ordersList.length === 0 && INITIAL_ORDERS.length > 0) {
-        setOrders(INITIAL_ORDERS);
-        INITIAL_ORDERS.forEach(async (o) => {
-          try {
-            await setDoc(doc(db, 'orders', o.id), o);
-          } catch (e) {
-            console.warn('Seeding order failed or under quota:', o.id, e);
-          }
-        });
-      } else {
-        // Sort orders by transactionDate/ID
-        ordersList.sort((a, b) => b.id.localeCompare(a.id));
-        setOrders(ordersList);
-      }
+      // Sort orders by transactionDate/ID
+      ordersList.sort((a, b) => b.id.localeCompare(a.id));
+      setOrders(ordersList);
 
       // Live detection of newly placed orders (ignore initial snapshot fetch)
       if (isInitial) {
