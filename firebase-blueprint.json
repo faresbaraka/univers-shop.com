@@ -54,6 +54,21 @@
         "sellerPhone": { "type": "string" }
       },
       "required": ["storeName", "logoUrl", "sellerPhone"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "A customer review for a product or the site",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "customerName": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "productId", "productName", "customerName", "rating", "comment", "createdAt"]
     }
   },
   "firestore": {
@@ -68,6 +83,10 @@
     "settings/{settingsId}": {
       "schema": "StoreSettings",
       "description": "Collection containing global store identity document"
+    },
+    "reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Collection of product and site reviews written by customers"
     }
   }
 }

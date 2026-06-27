@@ -124,3 +124,13 @@ export interface AISuiteState {
   marketingCampaigns: AIMarketingCampaign[];
   historicalStats: AIHistoricalStats[];
 }
+
+export interface Review {
+  id: string;
+  productId: string; // 'site' for general shop reviews, or product ID
+  productName: string; // Product name, or 'Site Web'
+  customerName: string;
+  rating: number; // 1-5
+  comment: string;
+  createdAt: string; // ISO format string
+}

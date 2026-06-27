@@ -18,7 +18,7 @@ import {
   Moon,
   Sun
 } from 'lucide-react';
-import { Product, CartItem, Order, StoreSettings, AISuiteState } from './types';
+import { Product, CartItem, Order, StoreSettings, AISuiteState, Review } from './types';
 import { DEFAULT_AI_STATE, runAIOptimizationCycle } from './lib/aiSuite';
 import { INITIAL_PRODUCTS, ALGERIAN_WILAYAS } from './data/mockProducts';
 import Navbar from './components/Navbar';
@@ -30,6 +30,7 @@ import BuyerOrderPortal from './components/BuyerOrderPortal';
 import AIAssistant from './components/AIAssistant';
 import DiscountWheel from './components/DiscountWheel';
 import QuestSystem from './components/QuestSystem';
+import CustomerReviews from './components/CustomerReviews';
 import { BackToTopButton } from './components/AIEnhancedSuite';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
@@ -158,6 +159,17 @@ export default function App() {
       return saved ? JSON.parse(saved) : [];
     } catch (e) {
       console.warn("Could not parse orders from localstorage:", e);
+      return [];
+    }
+  });
+
+  // Reviews state (persisted on Firestore with localStorage as instant fast-loading fallback)
+  const [reviews, setReviews] = useState<Review[]>(() => {
+    try {
+      const saved = localStorage.getItem('univers_shop_reviews');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.warn("Could not parse reviews from localstorage:", e);
       return [];
     }
   });
@@ -688,6 +700,34 @@ export default function App() {
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'reviews'), (snapshot) => {
+      const reviewsList: Review[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        reviewsList.push({
+          id: data.id || docSnap.id,
+          productId: data.productId || 'site',
+          productName: data.productName || 'Boutique',
+          customerName: data.customerName || 'Acheteur',
+          rating: Number(data.rating) || 5,
+          comment: data.comment || '',
+          createdAt: data.createdAt || new Date().toISOString(),
+        } as Review);
+      });
+      reviewsList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setReviews(reviewsList);
+    }, (error) => {
+      console.warn('Error reading live reviews from Firestore:', error);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('univers_shop_reviews', JSON.stringify(reviews));
+  }, [reviews]);
 
   useEffect(() => {
     localStorage.setItem('univers_shop_cart', JSON.stringify(cart));
@@ -1302,6 +1342,14 @@ export default function App() {
               </div>
             )}
           </div>
+
+          {/* Customer Reviews Hub */}
+          <CustomerReviews 
+            products={products}
+            reviews={reviews}
+            language={language}
+            onShowToast={showToast}
+          />
         </main>
       )}
 

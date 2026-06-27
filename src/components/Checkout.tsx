@@ -14,8 +14,11 @@ import {
   ArrowRight, 
   TrendingUp, 
   AlertCircle,
-  Calendar
+  Calendar,
+  Star
 } from 'lucide-react';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { CartItem, PaymentMethod, Order, StoreSettings } from '../types';
 import { ALGERIAN_WILAYAS, ALGERIAN_COMMUNES } from '../data/mockProducts';
 import { Language, translate } from '../lib/translations';
@@ -283,6 +286,42 @@ export default function Checkout({
 
   // Created order state for tickets
   const [orderReceipt, setOrderReceipt] = useState<Order | null>(null);
+
+  // Post-checkout feedback states (Defaulting to 5 stars per request)
+  const [siteRating, setSiteRating] = useState(5);
+  const [siteComment, setSiteComment] = useState('');
+  const [siteReviewSubmitted, setSiteReviewSubmitted] = useState(false);
+  const [isSiteReviewSubmitting, setIsSiteReviewSubmitting] = useState(false);
+
+  const handleSiteReviewSubmit = async () => {
+    if (!orderReceipt) return;
+    setIsSiteReviewSubmitting(true);
+    try {
+      const reviewId = `site-rev-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      await setDoc(doc(db, 'reviews', reviewId), {
+        id: reviewId,
+        productId: 'site',
+        productName: language === 'ar' ? 'الموقع الإلكتروني' : 'Site Web',
+        customerName: orderReceipt.customerName || 'Acheteur',
+        rating: siteRating,
+        comment: siteComment.trim() || (language === 'ar' ? 'موقع ممتاز وتسوق سهل وسريع!' : 'Excellent site, achat très simple et rapide !'),
+        createdAt: new Date().toISOString()
+      });
+      setSiteReviewSubmitted(true);
+      onShowToast?.(
+        language === 'ar' ? 'شكراً لتقييمك لموقعنا!' : 'Merci d\'avoir évalué notre site !',
+        'success'
+      );
+    } catch (error) {
+      console.error("Error saving site review:", error);
+      onShowToast?.(
+        language === 'ar' ? 'حدث خطأ أثناء حفظ تقييمك' : 'Une erreur est survenue lors de l\'enregistrement de votre avis',
+        'error'
+      );
+    } finally {
+      setIsSiteReviewSubmitting(false);
+    }
+  };
 
   // Secure Gateway states
   const [isChargilyConfigured, setIsChargilyConfigured] = useState(false);
@@ -1447,6 +1486,79 @@ export default function Checkout({
                     <p className="mt-1">Document de paiement officiel archivé avec signature numérique.</p>
                   </div>
                 </div>
+              </div>
+
+              {/* Site Feedback Card */}
+              <div className="bg-slate-50 border border-slate-200 rounded-3xl p-5 text-left space-y-4 shadow-2xs">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl mt-0.5">🌟</span>
+                  <div className="space-y-0.5">
+                    <h4 className="font-sans font-black text-slate-800 text-xs">
+                      {language === 'ar' ? 'ما هو تقييمك لموقعنا؟' : 'Quelle note attribuez-vous à notre site ?'}
+                    </h4>
+                    <p className="text-[10px] text-slate-400 font-sans leading-tight">
+                      {language === 'ar' ? 'ساعدنا على تحسين خدماتنا من خلال تقييم تجربتك السريعة والآمنة.' : 'Évaluez votre expérience d\'achat pour nous aider à maintenir une qualité de service premium.'}
+                    </p>
+                  </div>
+                </div>
+
+                {siteReviewSubmitted ? (
+                  <div className="bg-emerald-50 border border-emerald-150 rounded-2xl p-4 flex items-center gap-3 text-emerald-800 text-xs font-sans">
+                    <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                    <span>
+                      {language === 'ar' ? 'تم تسجيل تقييمك بنجاح! شكراً جزيلاً لك.' : 'Votre évaluation a été enregistrée avec succès. Merci pour votre fidélité !'}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="space-y-3 font-sans">
+                    {/* Star selection */}
+                    <div className="flex items-center gap-2">
+                      {[1, 2, 3, 4, 5].map((starVal) => (
+                        <button
+                          key={starVal}
+                          type="button"
+                          onClick={() => setSiteRating(starVal)}
+                          className="hover:scale-110 transition-transform cursor-pointer"
+                        >
+                          <Star 
+                            className={`w-7 h-7 transition-all ${
+                              starVal <= siteRating ? 'text-amber-500 fill-current' : 'text-slate-200'
+                            }`} 
+                          />
+                        </button>
+                      ))}
+                      <span className="text-xs font-mono font-bold text-slate-500 ml-2">{siteRating}/5</span>
+                    </div>
+
+                    {/* Optional Comment Input */}
+                    <div className="space-y-1">
+                      <input
+                        type="text"
+                        placeholder={
+                          language === 'ar' 
+                            ? 'اكتب تعليقاً بسيطاً عن تجربتك (اختياري)...' 
+                            : 'Votre commentaire ou avis (optionnel)...'
+                        }
+                        value={siteComment}
+                        onChange={(e) => setSiteComment(e.target.value)}
+                        className="w-full bg-white border border-slate-250 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20 text-slate-700 font-sans"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={isSiteReviewSubmitting}
+                      onClick={handleSiteReviewSubmit}
+                      className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-xs transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      {isSiteReviewSubmitting ? (
+                        <span>{language === 'ar' ? 'جاري الإرسال...' : 'Envoi en cours...'}</span>
+                      ) : (
+                        <span>{language === 'ar' ? 'إرسال التقييم' : 'Soumettre mon évaluation'}</span>
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Whatsapp integration & action buttons */}
