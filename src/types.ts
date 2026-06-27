@@ -65,6 +65,9 @@ export interface StoreSettings {
   promoCode?: string;
   promoDiscountType?: 'percentage' | 'fixed';
   promoDiscountValue?: number;
+  algeriaCupWinActive?: boolean;
+  algeriaCupWinsCount?: number;
+  googleMapsApiKey?: string;
 }
 
 export interface AICampaign {

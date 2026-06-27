@@ -17,7 +17,7 @@ import {
   Calendar
 } from 'lucide-react';
 import { CartItem, PaymentMethod, Order, StoreSettings } from '../types';
-import { ALGERIAN_WILAYAS } from '../data/mockProducts';
+import { ALGERIAN_WILAYAS, ALGERIAN_COMMUNES } from '../data/mockProducts';
 import { Language, translate } from '../lib/translations';
 
 interface CheckoutProps {
@@ -29,6 +29,191 @@ interface CheckoutProps {
   storeSettings?: StoreSettings;
   onShowToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
   language?: Language;
+}
+
+export interface RouteDetails {
+  distanceKm: number;
+  durationText: string;
+  routePath: string;
+}
+
+function getStringHash(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return Math.abs(hash);
+}
+
+function getBaseRouteFromBainsRomains(wilayaCode: number): RouteDetails {
+  switch (wilayaCode) {
+    case 16: // Alger
+      return { distanceKm: 18, durationText: "25 minutes", routePath: "Bains Romains (N11) → Bab El Oued → Alger Centre" };
+    case 9: // Blida
+      return { distanceKm: 52, durationText: "50 minutes", routePath: "Bains Romains (N11) → Chéraga → Autoroute de l'Ouest (A1) → Blida" };
+    case 42: // Tipaza
+      return { distanceKm: 62, durationText: "55 minutes", routePath: "Bains Romains (N11) → Zéralda → Voie Rapide Tipaza" };
+    case 35: // Boumerdes
+      return { distanceKm: 58, durationText: "1 heure", routePath: "Bains Romains (N11) → Rocade Sud → Autoroute Est-Ouest → Boumerdès" };
+    case 2: // Chlef
+      return { distanceKm: 210, durationText: "2 heures 30 mins", routePath: "Bains Romains → Rocade Sud → A1 Ouest → Chlef" };
+    case 31: // Oran
+      return { distanceKm: 412, durationText: "4 heures 15 mins", routePath: "Bains Romains → Rocade Sud → A1 Ouest → Relizane → Oran" };
+    case 25: // Constantine
+      return { distanceKm: 395, durationText: "4 heures 30 mins", routePath: "Bains Romains → Rocade Sud → A1 Est → Sétif → Constantine" };
+    case 23: // Annaba
+      return { distanceKm: 590, durationText: "6 heures 15 mins", routePath: "Bains Romains → A1 Est → Constantine → El Tarf → Annaba" };
+    case 19: // Sétif
+      return { distanceKm: 300, durationText: "3 heures 20 mins", routePath: "Bains Romains → Rocade Sud → A1 Est → Sétif" };
+    case 30: // Ouargla
+      return { distanceKm: 780, durationText: "9 heures 15 mins", routePath: "Bains Romains → Bouira → Djelfa → Ghardaïa → Ouargla" };
+    case 47: // Ghardaia
+      return { distanceKm: 600, durationText: "7 heures 45 mins", routePath: "Bains Romains → Médéa → Djelfa → Laghouat → Ghardaïa" };
+    case 11: // Tamanrasset
+      return { distanceKm: 1920, durationText: "22 heures non-stop", routePath: "Bains Romains → Djelfa → Ghardaïa → In Salah → Tamanrasset (N1)" };
+    default:
+      // Dynamically estimate based on shipping fee or code
+      const fee = ALGERIAN_WILAYAS.find(w => w.code === wilayaCode)?.shippingFee || 600;
+      let dist = 100;
+      let timeText = "2 heures";
+      let pathStr = "";
+      if (fee <= 400) {
+        dist = 60;
+        timeText = "1 heure 10 mins";
+        pathStr = "Bains Romains → Rocade Sud → Autoroute Locale";
+      } else if (fee <= 550) {
+        dist = 280;
+        timeText = "3 heures 15 mins";
+        pathStr = "Bains Romains → Rocade Sud → Autoroute Est-Ouest";
+      } else if (fee <= 700) {
+        dist = 420;
+        timeText = "4 heures 45 mins";
+        pathStr = "Bains Romains → Rocade Sud → Autoroute Nationale A1";
+      } else if (fee <= 900) {
+        dist = 650;
+        timeText = "7 heures 30 mins";
+        pathStr = "Bains Romains → A1 Sud → Route Nationale Saharienne N1";
+      } else if (fee <= 1200) {
+        dist = 950;
+        timeText = "11 heures";
+        pathStr = "Bains Romains → Transsaharienne N1 → Route des Oasis";
+      } else {
+        dist = 1600;
+        timeText = "18 heures";
+        pathStr = "Bains Romains → Grand Sud Algérien Transsaharienne N1 / N3";
+      }
+      return { distanceKm: dist, durationText: timeText, routePath: pathStr };
+  }
+}
+
+export function getRouteFromBainsRomains(wilayaCode: number, communeName?: string): RouteDetails {
+  if (wilayaCode === 16) {
+    const normCommune = (communeName || '').toLowerCase().trim();
+    if (!normCommune || normCommune.includes('bains romains')) {
+      return { distanceKm: 1, durationText: "5 minutes", routePath: "Bains Romains (Livraison Locale)" };
+    }
+    if (normCommune.includes('hammamet')) {
+      return { distanceKm: 3, durationText: "7 minutes", routePath: "Bains Romains → Hammamet (N11)" };
+    }
+    if (normCommune.includes('bologhine')) {
+      return { distanceKm: 6, durationText: "10 minutes", routePath: "Bains Romains → N11 → Bologhine" };
+    }
+    if (normCommune.includes('bab el oued')) {
+      return { distanceKm: 10, durationText: "15 minutes", routePath: "Bains Romains → N11 → Bab El Oued" };
+    }
+    if (normCommune.includes('alger centre') || normCommune.includes('sidi m\'hamed') || normCommune.includes('casbah') || normCommune.includes('belouizdad')) {
+      return { distanceKm: 15, durationText: "20 minutes", routePath: "Bains Romains → N11 → Bab El Oued → Alger Centre" };
+    }
+    if (normCommune.includes('cheraga') || normCommune.includes('ouled fayet')) {
+      return { distanceKm: 11, durationText: "18 minutes", routePath: "Bains Romains → Route de Chéraga → Chéraga" };
+    }
+    if (normCommune.includes('zeralda')) {
+      return { distanceKm: 22, durationText: "25 minutes", routePath: "Bains Romains → N11 Ouest → Voie Rapide → Zéralda" };
+    }
+    if (normCommune.includes('dely ibrahim') || normCommune.includes('ben aknoun') || normCommune.includes('el biar')) {
+      return { distanceKm: 12, durationText: "18 minutes", routePath: "Bains Romains → Chéraga → Dely Ibrahim" };
+    }
+    if (normCommune.includes('hydra') || normCommune.includes('bir mourad raïs')) {
+      return { distanceKm: 16, durationText: "22 minutes", routePath: "Bains Romains → Chéraga → Rocade Sud → Hydra" };
+    }
+    if (normCommune.includes('el harrach') || normCommune.includes('baraki') || normCommune.includes('oued smar')) {
+      return { distanceKm: 25, durationText: "30 minutes", routePath: "Bains Romains → Rocade Nord → El Harrach" };
+    }
+    if (normCommune.includes('bab ezzouar') || normCommune.includes('kouba') || normCommune.includes('hussein dey')) {
+      return { distanceKm: 28, durationText: "32 minutes", routePath: "Bains Romains → Rocade Nord → Bab Ezzouar" };
+    }
+    if (normCommune.includes('rouiba') || normCommune.includes('reghaïa') || normCommune.includes('ain taya') || normCommune.includes('bordj el kiffan') || normCommune.includes('bordj el bahri')) {
+      return { distanceKm: 38, durationText: "40 minutes", routePath: "Bains Romains → Rocade Nord → Autoroute de l'Est → Rouiba" };
+    }
+
+    const h = getStringHash(normCommune);
+    const dist = 8 + (h % 15); // 8 to 22 km
+    const mins = 12 + (h % 20); // 12 to 31 mins
+    return {
+      distanceKm: dist,
+      durationText: `${mins} minutes`,
+      routePath: `Bains Romains → Chéraga / Rocade Nord → ${communeName}`
+    };
+  }
+
+  const baseRoute = getBaseRouteFromBainsRomains(wilayaCode);
+  if (communeName) {
+    const normCommune = communeName.trim();
+    const h = getStringHash(normCommune);
+    
+    // Adjust distance by -15% to +25%
+    const pctChange = -15 + (h % 41); // -15% to +25%
+    let newDist = Math.round(baseRoute.distanceKm * (1 + pctChange / 100));
+    newDist = Math.max(newDist, 15); // At least 15km if outside Alger
+    
+    // Adjust duration similarly
+    let baseMins = 60;
+    if (baseRoute.durationText.includes("minutes")) {
+      baseMins = parseInt(baseRoute.durationText, 10);
+    } else if (baseRoute.durationText.includes("heure")) {
+      const hrsMatch = baseRoute.durationText.match(/(\d+)\s*heure/);
+      const minsMatch = baseRoute.durationText.match(/(\d+)\s*min/);
+      const hrs = hrsMatch ? parseInt(hrsMatch[1], 10) : 1;
+      const mins = minsMatch ? parseInt(minsMatch[1], 10) : 0;
+      baseMins = hrs * 60 + mins;
+    }
+    
+    let newMins = Math.round(baseMins * (1 + (pctChange * 0.8) / 100));
+    newMins = Math.max(newMins, 20); // At least 20 minutes outside Alger
+    
+    let durationText = "";
+    if (newMins < 60) {
+      durationText = `${newMins} minutes`;
+    } else {
+      const hPart = Math.floor(newMins / 60);
+      const mPart = newMins % 60;
+      if (hPart === 1) {
+        durationText = mPart > 0 ? `1 heure ${mPart} mins` : "1 heure";
+      } else {
+        durationText = mPart > 0 ? `${hPart} heures ${mPart} mins` : `${hPart} heures`;
+      }
+    }
+    
+    let routePath = baseRoute.routePath;
+    if (routePath.includes(" → ")) {
+      const parts = routePath.split(" → ");
+      if (parts.length > 1) {
+        parts[parts.length - 1] = `${parts[parts.length - 1]} (${normCommune})`;
+        routePath = parts.join(" → ");
+      } else {
+        routePath = `${routePath} → ${normCommune}`;
+      }
+    } else {
+      routePath = `${routePath} → ${normCommune}`;
+    }
+    
+    return {
+      distanceKm: newDist,
+      durationText,
+      routePath
+    };
+  }
+  return baseRoute;
 }
 
 export default function Checkout({ 
@@ -46,7 +231,20 @@ export default function Checkout({
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [selectedWilayaCode, setSelectedWilayaCode] = useState<number>(16); // Alger default
+  const [selectedCommune, setSelectedCommune] = useState<string>('');
+  const [customCommune, setCustomCommune] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('delivery');
+
+  // Automatically update selected commune when wilaya changes
+  useEffect(() => {
+    const communes = ALGERIAN_COMMUNES[selectedWilayaCode] || [];
+    if (communes.length > 0) {
+      setSelectedCommune(communes[0]);
+    } else {
+      setSelectedCommune('');
+    }
+    setCustomCommune('');
+  }, [selectedWilayaCode]);
 
   // Delivery Preferences
   const [deliveryDate, setDeliveryDate] = useState(() => {
@@ -95,45 +293,52 @@ export default function Checkout({
   const selectedWilaya = ALGERIAN_WILAYAS.find(w => w.code === selectedWilayaCode) || ALGERIAN_WILAYAS[15]; // default Alger
   const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
 
+  const finalCommuneName = selectedCommune === 'autre' ? customCommune.trim() : selectedCommune;
+  const combinedAddress = `${finalCommuneName ? finalCommuneName + ' - ' : ''}${address.trim()}`;
+
   // Dynamically calculate discount
   const getDiscountDeduction = () => {
-    if (!appliedPromoCode) return 0;
+    let baseDiscount = 0;
     
-    const code = appliedPromoCode.trim().toUpperCase();
-    if (code === 'ROUELIVRAISON') return 0; // Handled in shipping total
-    if (code === 'ROUE50LIV') return 0; // Handled in shipping total
-    if (code === 'ROUE10') {
-      return Math.round((subtotal * 10) / 100);
-    }
-    if (code === 'ROUE5') {
-      return Math.round((subtotal * 5) / 100);
-    }
-    if (code === 'ROUE500') {
-      return Math.min(500, subtotal);
-    }
-    if (code === 'ROUECADEAU') {
-      return Math.min(200, subtotal);
-    }
-    if (code === 'RECOMPENSE150') {
-      return Math.min(150, subtotal);
-    }
-    if (code === 'RECOMPENSE300') {
-      return Math.min(350, subtotal);
-    }
-    if (code === 'RECOMPENSE500') {
-      return Math.min(650, subtotal);
+    if (appliedPromoCode) {
+      const code = appliedPromoCode.trim().toUpperCase();
+      if (code === 'ROUELIVRAISON') {
+        baseDiscount = 0;
+      } else if (code === 'ROUE50LIV') {
+        baseDiscount = 0;
+      } else if (code === 'ROUE10') {
+        baseDiscount = Math.round((subtotal * 10) / 100);
+      } else if (code === 'ROUE5') {
+        baseDiscount = Math.round((subtotal * 5) / 100);
+      } else if (code === 'ROUE500') {
+        baseDiscount = Math.min(500, subtotal);
+      } else if (code === 'ROUECADEAU') {
+        baseDiscount = Math.min(200, subtotal);
+      } else if (code === 'RECOMPENSE150') {
+        baseDiscount = Math.min(150, subtotal);
+      } else if (code === 'RECOMPENSE300') {
+        baseDiscount = Math.min(350, subtotal);
+      } else if (code === 'RECOMPENSE500') {
+        baseDiscount = Math.min(650, subtotal);
+      } else if (storeSettings && storeSettings.promoCodeActive && code === storeSettings.promoCode?.trim().toUpperCase()) {
+        if (storeSettings.promoDiscountType === 'percentage') {
+          const percentage = storeSettings.promoDiscountValue || 0;
+          baseDiscount = Math.round((subtotal * percentage) / 100);
+        } else {
+          const fixedValue = storeSettings.promoDiscountValue || 0;
+          baseDiscount = Math.min(fixedValue, subtotal);
+        }
+      }
     }
 
-    if (!storeSettings || !storeSettings.promoCodeActive) return 0;
-    if (code !== storeSettings.promoCode?.trim().toUpperCase()) return 0;
-
-    if (storeSettings.promoDiscountType === 'percentage') {
-      const percentage = storeSettings.promoDiscountValue || 0;
-      return Math.round((subtotal * percentage) / 100);
-    } else {
-      const fixedValue = storeSettings.promoDiscountValue || 0;
-      return Math.min(fixedValue, subtotal);
+    // Algeria World Cup victory automatic discount (5% per won match)
+    if (storeSettings?.algeriaCupWinActive) {
+      const wins = storeSettings.algeriaCupWinsCount || 1;
+      const pct = wins * 5;
+      baseDiscount += Math.round((subtotal * pct) / 100);
     }
+
+    return Math.min(baseDiscount, subtotal);
   };
 
   const discountDeduction = getDiscountDeduction();
@@ -207,7 +412,10 @@ export default function Checkout({
       newErrors.phone = language === 'ar' ? 'رقم الهاتف غير صالح (مثال: 0558926754)' : 'Format de numéro algérien invalide (ex: 0558926754).';
     }
     if (!address.trim()) {
-      newErrors.address = language === 'ar' ? 'عنوان التسليم مطلوب.' : "L'adresse de livraison est obligatoire.";
+      newErrors.address = language === 'ar' ? 'عنوان التسليم التفصيلي مطلوب.' : "L'adresse de livraison détaillée est obligatoire.";
+    }
+    if (selectedCommune === 'autre' && !customCommune.trim()) {
+      newErrors.commune = language === 'ar' ? 'اسم البلدية مطلوب.' : "Le nom de la commune est obligatoire.";
     }
 
     // 3. Human check
@@ -308,7 +516,7 @@ export default function Checkout({
               amount: totalAmount,
               customerName: name,
               customerPhone: phone,
-              customerAddress: address,
+              customerAddress: combinedAddress,
               customerWilaya: selectedWilaya.name,
               successUrl: window.location.href,
               failureUrl: window.location.href,
@@ -443,7 +651,7 @@ export default function Checkout({
       transactionId: transactionId,
       customerName: name,
       customerPhone: phone,
-      customerAddress: address,
+      customerAddress: combinedAddress,
       customerWilaya: selectedWilaya.name,
       items: cart.map(item => ({
         productId: item.product.id,
@@ -620,13 +828,95 @@ export default function Checkout({
                 </div>
               </div>
 
+              {/* Dynamic Road Travel Estimation from Bains Romains */}
+              {(() => {
+                const buyerCommune = selectedCommune === 'autre' ? customCommune : selectedCommune;
+                const route = getRouteFromBainsRomains(selectedWilayaCode, buyerCommune);
+                return (
+                  <div className="bg-sky-50/70 border border-sky-100 rounded-2xl p-4 space-y-2.5 font-sans animate-fade-in" id="road-itinerary-estimator-panel">
+                    <div className="flex items-center gap-2 text-sky-900 border-b border-sky-100 pb-2">
+                      <MapPin className="w-4.5 h-4.5 text-sky-600" />
+                      <span className="text-xs font-extrabold uppercase tracking-wider">
+                        {language === 'ar' ? 'مسار ووقت التوصيل على الطريق' : 'Itinéraire & Temps de Trajet sur la Route'}
+                      </span>
+                    </div>
+                    <div className="text-xs space-y-1.5 text-sky-950">
+                      <div className="flex justify-between items-center bg-white/60 p-2 rounded-lg">
+                        <span className="font-medium text-slate-500 text-[11px]">{language === 'ar' ? 'موقع البائع (الانطلاق):' : 'Départ (Vendeur):'}</span>
+                        <span className="font-extrabold text-slate-800 text-[11px]">📍 Bains Romains, Alger</span>
+                      </div>
+                      <div className="flex justify-between items-center bg-white/60 p-2 rounded-lg">
+                        <span className="font-medium text-slate-500 text-[11px]">{language === 'ar' ? 'موقعك (الوصول):' : 'Arrivée (Acheteur):'}</span>
+                        <span className="font-extrabold text-slate-800 text-[11px]">
+                          📍 {buyerCommune ? `${buyerCommune} (${selectedWilaya.name})` : selectedWilaya.name}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <div className="bg-sky-100/60 p-2 rounded-xl text-center">
+                          <p className="text-[9px] text-sky-700 font-bold uppercase">{language === 'ar' ? 'المسافة الإجمالية' : 'Distance de route'}</p>
+                          <p className="text-sm font-black text-sky-950 mt-0.5">{route.distanceKm} km</p>
+                        </div>
+                        <div className="bg-sky-100/60 p-2 rounded-xl text-center">
+                          <p className="text-[9px] text-sky-700 font-bold uppercase">{language === 'ar' ? 'زمن السير الفعلي' : 'Temps de conduite'}</p>
+                          <p className="text-sm font-black text-sky-950 mt-0.5">≈ {route.durationText}</p>
+                        </div>
+                      </div>
+                      <div className="bg-white/40 p-2 rounded-xl text-[10px] leading-relaxed text-sky-900 border border-sky-100/50">
+                        <span className="font-bold">{language === 'ar' ? 'المسار الموصى به: ' : 'Itinéraire recommandé : '}</span>
+                        <span className="italic">{route.routePath}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Commune / Ville Selector */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                    {language === 'ar' ? 'البلدية / المدينة *' : 'Commune / Ville *'}
+                  </label>
+                  <select 
+                    value={selectedCommune}
+                    onChange={(e) => setSelectedCommune(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+                  >
+                    {(ALGERIAN_COMMUNES[selectedWilayaCode] || []).map((commune) => (
+                      <option key={commune} value={commune}>
+                        {commune}
+                      </option>
+                    ))}
+                    <option value="autre">
+                      {language === 'ar' ? 'بلدية أخرى (كتابة يدوية)...' : 'Autre commune (Saisir manuellement)...'}
+                    </option>
+                  </select>
+                </div>
+
+                {/* Custom Commune name input if "autre" is selected */}
+                {selectedCommune === 'autre' && (
+                  <div className="animate-fade-in">
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                      {language === 'ar' ? 'اسم البلدية يدويًا *' : 'Nom de la commune manuellement *'}
+                    </label>
+                    <input 
+                      type="text"
+                      value={customCommune}
+                      onChange={(e) => setCustomCommune(e.target.value)}
+                      placeholder={language === 'ar' ? 'اكتب اسم بلديتك هنا' : 'Saisissez le nom de votre commune'}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+                    />
+                    {errors.commune && <p className="text-rose-500 text-xs font-semibold mt-1">{errors.commune}</p>}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">
-                  {language === 'ar' ? 'العنوان الكامل (البلدية والشارع) *' : 'Adresse Complète *'}
+                  {language === 'ar' ? 'العنوان التفصيلي (رقم الشارع، الحي، الباب...) *' : 'Adresse de livraison détaillée (Rue, Quartier, N° de porte...) *'}
                 </label>
                 <textarea 
-                  rows={3}
-                  placeholder={language === 'ar' ? 'رقم الشارع، الحي، البلدية، أو علامات توجيهية للموصل' : 'Numéro de rue, Quartier, Commune, Bureau de poste ou indications'}
+                  rows={2}
+                  placeholder={language === 'ar' ? 'رقم الشارع، الحي، رقم العمارة/المنزل أو علامات توجيهية للموصل' : 'N° de rue, Quartier, Résidence, Appartement ou repères pour le livreur'}
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"

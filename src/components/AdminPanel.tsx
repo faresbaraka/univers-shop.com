@@ -30,6 +30,8 @@ import {
   Lightbulb
 } from 'lucide-react';
 import { Product, Order, PaymentMethod, StoreSettings, AISuiteState, AICampaign, AIDecision, AIMarketingCampaign } from '../types';
+import { db } from '../lib/firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 interface AdminPanelProps {
   products: Product[];
@@ -91,6 +93,9 @@ export default function AdminPanel({
   const [localPromoCode, setLocalPromoCode] = useState(storeSettings?.promoCode || '');
   const [localPromoDiscountType, setLocalPromoDiscountType] = useState<'percentage' | 'fixed'>(storeSettings?.promoDiscountType || 'percentage');
   const [localPromoDiscountValue, setLocalPromoDiscountValue] = useState(storeSettings?.promoDiscountValue?.toString() || '');
+  const [localAlgeriaCupWinActive, setLocalAlgeriaCupWinActive] = useState(storeSettings?.algeriaCupWinActive || false);
+  const [localAlgeriaCupWinsCount, setLocalAlgeriaCupWinsCount] = useState<number>(storeSettings?.algeriaCupWinsCount || 1);
+  const [localGoogleMapsApiKey, setLocalGoogleMapsApiKey] = useState(storeSettings?.googleMapsApiKey || '');
   const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
 
   React.useEffect(() => {
@@ -104,8 +109,51 @@ export default function AdminPanel({
       setLocalPromoCode(storeSettings.promoCode || '');
       setLocalPromoDiscountType(storeSettings.promoDiscountType || 'percentage');
       setLocalPromoDiscountValue(storeSettings.promoDiscountValue?.toString() || '');
+      setLocalAlgeriaCupWinActive(storeSettings.algeriaCupWinActive || false);
+      setLocalAlgeriaCupWinsCount(storeSettings.algeriaCupWinsCount || 1);
+      setLocalGoogleMapsApiKey(storeSettings.googleMapsApiKey || '');
     }
   }, [storeSettings]);
+
+  // Visitor analytics real-time hook
+  const [visits, setVisits] = useState<{ total: number; daily: Record<string, number> }>({ total: 0, daily: {} });
+  React.useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'analytics', 'visits'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setVisits({
+          total: data.total || 0,
+          daily: data.daily || {}
+        });
+      }
+    }, (error) => {
+      console.warn("Error listening to visits analytics:", error);
+    });
+    return unsub;
+  }, []);
+
+  const handleQuickToggleAlgeriaCup = async () => {
+    if (!onUpdateSettings || !storeSettings) return;
+    try {
+      const nextActive = !storeSettings.algeriaCupWinActive;
+      const wins = storeSettings.algeriaCupWinsCount || 1;
+      await onUpdateSettings({
+        ...storeSettings,
+        algeriaCupWinActive: nextActive,
+        algeriaCupWinsCount: wins
+      });
+      if (onShowToast) {
+        onShowToast(
+          nextActive 
+            ? `🏆 Algérie gagne ! Réduction globale de ${wins * 5}% activée avec succès !` 
+            : "🇩🇿 Réduction de la Coupe du Monde désactivée.",
+          'success'
+        );
+      }
+    } catch (e) {
+      console.warn("Error toggling cup settings:", e);
+    }
+  };
 
   // AI Suite helper functions
   const updateAISuiteParam = (key: keyof AISuiteState, value: any) => {
@@ -296,7 +344,10 @@ export default function AdminPanel({
         promoCodeActive: localPromoCodeActive,
         promoCode: localPromoCode.trim(),
         promoDiscountType: localPromoDiscountType,
-        promoDiscountValue: localPromoDiscountValue ? Number(localPromoDiscountValue) : undefined
+        promoDiscountValue: localPromoDiscountValue ? Number(localPromoDiscountValue) : undefined,
+        algeriaCupWinActive: localAlgeriaCupWinActive,
+        algeriaCupWinsCount: Number(localAlgeriaCupWinsCount) || 1,
+        googleMapsApiKey: localGoogleMapsApiKey.trim()
       });
       if (onShowToast) {
         onShowToast('Paramètres de la boutique mis à jour avec succès !', 'success');
@@ -661,6 +712,174 @@ export default function AdminPanel({
               )}
             </div>
           </div>
+
+          {/* Quick World Cup 2026 Algeria Toggle & Status Widget */}
+          <div className="bg-gradient-to-r from-emerald-900 via-[#064e3b] to-emerald-900 text-white rounded-3xl p-6 border border-emerald-800 shadow-lg relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(52,211,153,0.1),transparent)] pointer-events-none"></div>
+            <div className="space-y-1 relative z-10 text-center md:text-left">
+              <div className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 font-extrabold text-[10px] uppercase tracking-widest px-3 py-1 rounded-full border border-emerald-400/20">
+                🏆 Coupe du Monde 2026 ⚽
+              </div>
+              <h3 className="font-display font-black text-lg">Actionneur de Victoire de l'Algérie</h3>
+              <p className="text-slate-300 text-xs max-w-xl">
+                Chaque victoire ajoute 5% de réduction cumulable. Actuellement : <span className="text-emerald-400 font-black">{storeSettings?.algeriaCupWinsCount || 1} match(s)</span> gagné(s) soit <span className="text-emerald-400 font-black">{((storeSettings?.algeriaCupWinsCount || 1) * 5)}%</span> de réduction automatique pour l'ensemble des visiteurs !
+              </p>
+            </div>
+            <button
+              onClick={handleQuickToggleAlgeriaCup}
+              className={`px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-wider shadow-md transition-all hover:scale-[1.02] active:scale-95 cursor-pointer flex items-center gap-2 ${
+                storeSettings?.algeriaCupWinActive 
+                  ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-950/20' 
+                  : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black shadow-emerald-950/20'
+              }`}
+            >
+              <span>{storeSettings?.algeriaCupWinActive ? `🔴 Désactiver la réduction (${((storeSettings?.algeriaCupWinsCount || 1) * 5)}%)` : `🟢 Activer la réduction (${((storeSettings?.algeriaCupWinsCount || 1) * 5)}%)`}</span>
+            </button>
+          </div>
+
+          {/* Secondary Stats Row: Visits and Deliveries */}
+          {(() => {
+            const todayAlgerianDate = new Date().toLocaleDateString('fr-DZ', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit'
+            }).replace(/\//g, '-');
+            const totalVisitsCount = visits.total || 0;
+            const visitsTodayCount = visits.daily?.[todayAlgerianDate] || 0;
+
+            const todayISOString = new Date().toISOString().split('T')[0];
+            const totalDeliveriesCount = orders.filter(o => o.orderStatus === 'delivered').length;
+            
+            const deliveriesDailyMap: Record<string, number> = {};
+            orders.forEach(o => {
+              if (o.orderStatus === 'delivered' && o.deliveryDate) {
+                deliveriesDailyMap[o.deliveryDate] = (deliveriesDailyMap[o.deliveryDate] || 0) + 1;
+              }
+            });
+            const deliveriesTodayCount = deliveriesDailyMap[todayISOString] || 0;
+
+            const sortedVisitsDaily = Object.entries(visits.daily || {}).sort((a, b) => b[0].localeCompare(a[0]));
+            const sortedDeliveriesDaily = Object.entries(deliveriesDailyMap).sort((a, b) => b[0].localeCompare(a[0]));
+
+            return (
+              <div className="space-y-8 animate-fade-in" id="seller-visits-deliveries-analytics-section">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="p-3 bg-sky-50 text-sky-600 rounded-2xl"><Users className="w-6 h-6" /></div>
+                      <span className="text-[10px] font-bold text-sky-600 bg-sky-50 px-2 py-1 rounded-md">Aujourd'hui</span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Visites d'Aujourd'hui</p>
+                    <h4 className="text-2xl font-display font-black text-slate-900">{visitsTodayCount}</h4>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl"><Users className="w-6 h-6" /></div>
+                      <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">Depuis le début</span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Visiteurs Cumulés</p>
+                    <h4 className="text-2xl font-display font-black text-slate-900">{totalVisitsCount}</h4>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl"><Truck className="w-6 h-6" /></div>
+                      <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded-md">Livraison Jour</span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Livraisons d'Aujourd'hui</p>
+                    <h4 className="text-2xl font-display font-black text-slate-900">{deliveriesTodayCount}</h4>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><Truck className="w-6 h-6" /></div>
+                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">Historique</span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Livraisons Totales</p>
+                    <h4 className="text-2xl font-display font-black text-slate-900">{totalDeliveriesCount}</h4>
+                  </div>
+                </div>
+
+                {/* Grid for Daily Log Tables */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* Visits Log Table */}
+                  <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs">
+                    <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
+                      <span className="text-lg">📊</span>
+                      <div>
+                        <h4 className="font-display font-bold text-sm text-slate-900">Suivi des Visiteurs par Jour</h4>
+                        <p className="text-[10px] text-slate-400">Nombre de clients ayant visité le même jour</p>
+                      </div>
+                    </div>
+
+                    {sortedVisitsDaily.length === 0 ? (
+                      <p className="text-xs text-slate-400 py-6 text-center italic">Aucune donnée de fréquentation disponible.</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider">
+                              <th className="py-2.5">Date Calendrier</th>
+                              <th className="py-2.5 text-right">Nombre de Visiteurs</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-mono text-slate-700 font-medium">
+                            {sortedVisitsDaily.slice(0, 10).map(([date, count]) => (
+                              <tr key={date} className={date === todayAlgerianDate ? 'bg-sky-50/50 font-bold text-sky-950' : ''}>
+                                <td className="py-2.5 flex items-center gap-1.5">
+                                  <span>📅</span> {date}
+                                  {date === todayAlgerianDate && <span className="text-[9px] bg-sky-100 text-sky-800 font-bold uppercase px-1.5 py-0.5 rounded ml-1">Aujourd'hui</span>}
+                                </td>
+                                <td className="py-2.5 text-right font-black text-slate-950 text-sm">{count}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Deliveries Log Table */}
+                  <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs">
+                    <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
+                      <span className="text-lg">📦</span>
+                      <div>
+                        <h4 className="font-display font-bold text-sm text-slate-900">Rapport de Livraisons Réalisées</h4>
+                        <p className="text-[10px] text-slate-400">Nombre de colis livrés triés par date</p>
+                      </div>
+                    </div>
+
+                    {sortedDeliveriesDaily.length === 0 ? (
+                      <p className="text-xs text-slate-400 py-6 text-center italic">Aucun colis marqué comme 'Livré' pour le moment.</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider">
+                              <th className="py-2.5">Date Prévue de Livraison</th>
+                              <th className="py-2.5 text-right">Colis Livrés</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-mono text-slate-700 font-medium">
+                            {sortedDeliveriesDaily.slice(0, 10).map(([date, count]) => (
+                              <tr key={date} className={date === todayISOString ? 'bg-rose-50/50 font-bold text-rose-950' : ''}>
+                                <td className="py-2.5 flex items-center gap-1.5">
+                                  <span>🚚</span> {date}
+                                  {date === todayISOString && <span className="text-[9px] bg-rose-100 text-rose-800 font-bold uppercase px-1.5 py-0.5 rounded ml-1">Aujourd'hui</span>}
+                                </td>
+                                <td className="py-2.5 text-right font-black text-slate-950 text-sm">{count}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1476,6 +1695,98 @@ export default function AdminPanel({
                       🗑 Désactiver l'image (Repasser en texte)
                     </button>
                   )}
+                </div>
+              </div>
+
+              {/* Algeria World Cup 2026 Match Victory Promo Configuration */}
+              <div className="space-y-4 border-t border-slate-100 pt-6 animate-fade-in">
+                <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-2xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-start gap-3">
+                      <span className="text-2xl">🇩🇿</span>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <span>Réduction Coupe du Monde 2026 (Algérie)</span>
+                          <span className="bg-emerald-500 text-white text-[9px] px-1.5 py-0.5 rounded font-black">
+                            {localAlgeriaCupWinsCount * 5}% TOTAL AUTO
+                          </span>
+                        </label>
+                        <p className="text-[10px] text-slate-500 mt-1">
+                          Activez cette option et ajustez le nombre de victoires. Chaque victoire de l'Algérie ajoute 5% de réduction automatique cumulable pour tout le monde !
+                        </p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={localAlgeriaCupWinActive} 
+                        onChange={(e) => setLocalAlgeriaCupWinActive(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                    </label>
+                  </div>
+
+                  {localAlgeriaCupWinActive && (
+                    <div className="flex items-center gap-4 bg-white/60 p-3 rounded-xl border border-emerald-100/50 animate-fade-in">
+                      <span className="text-xs font-bold text-slate-700">Nombre de matchs gagnés :</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setLocalAlgeriaCupWinsCount(Math.max(1, localAlgeriaCupWinsCount - 1))}
+                          className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold flex items-center justify-center cursor-pointer select-none"
+                        >
+                          -
+                        </button>
+                        <span className="w-10 text-center font-mono font-black text-sm text-slate-900">
+                          {localAlgeriaCupWinsCount}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setLocalAlgeriaCupWinsCount(localAlgeriaCupWinsCount + 1)}
+                          className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold flex items-center justify-center cursor-pointer select-none"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <div className="ml-auto text-xs font-black text-emerald-700 font-mono bg-emerald-100/70 px-2.5 py-1 rounded-lg">
+                        = Réduction de {localAlgeriaCupWinsCount * 5}%
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Google Maps API Key Configuration */}
+              <div className="space-y-4 border-t border-slate-100 pt-6 animate-fade-in">
+                <div className="bg-sky-50/50 border border-sky-100 p-5 rounded-2xl space-y-3">
+                  <div className="flex items-start gap-3">
+                    <span className="p-2 bg-sky-100 text-sky-600 rounded-xl text-sm">
+                      📍
+                    </span>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <span>Clé API Google Maps (Suivi GPS Réel)</span>
+                      </label>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Optionnel. Permet d'activer la vraie carte satellite Google Maps interactive à la place de notre radar GPS vectoriel simulé pour les clients.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={localGoogleMapsApiKey}
+                      onChange={(e) => setLocalGoogleMapsApiKey(e.target.value)}
+                      className="w-full text-xs font-mono text-slate-700 bg-white border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#0052FF] transition-all"
+                      placeholder="Ex: AIzaSyD..."
+                    />
+                    <div className="bg-white border border-slate-100 p-3 rounded-xl text-[10px] text-slate-500 space-y-1">
+                      <p className="font-bold text-slate-700">💡 Où trouver cette clé ?</p>
+                      <p>Rendez-vous sur la console Google Cloud, activez l'API Maps SDK for JavaScript, générez une clé API et collez-la ici. Elle sera immédiatement sauvegardée dans votre base de données sécurisée Firestore.</p>
+                    </div>
+                  </div>
                 </div>
               </div>
 

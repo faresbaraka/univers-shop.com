@@ -31,7 +31,7 @@ import AIAssistant from './components/AIAssistant';
 import DiscountWheel from './components/DiscountWheel';
 import QuestSystem from './components/QuestSystem';
 import { BackToTopButton } from './components/AIEnhancedSuite';
-import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
 import { Language, translate } from './lib/translations';
 
@@ -424,7 +424,9 @@ export default function App() {
           promoCodeActive: data.promoCodeActive || false,
           promoCode: data.promoCode || '',
           promoDiscountType: data.promoDiscountType || 'percentage',
-          promoDiscountValue: data.promoDiscountValue !== undefined ? Number(data.promoDiscountValue) : undefined
+          promoDiscountValue: data.promoDiscountValue !== undefined ? Number(data.promoDiscountValue) : undefined,
+          algeriaCupWinActive: data.algeriaCupWinActive || false,
+          algeriaCupWinsCount: data.algeriaCupWinsCount !== undefined ? Number(data.algeriaCupWinsCount) : 0
         });
       } else {
         // Safe seeding if the doc doesn't exist yet
@@ -466,6 +468,41 @@ export default function App() {
     });
 
     return () => unsubscribe();
+  }, []);
+
+  // Site visits tracking (Total and Daily) in Firestore
+  useEffect(() => {
+    // Only count once per browser session to get realistic unique session visits
+    if (!sessionStorage.getItem('univers_shop_counted_session')) {
+      sessionStorage.setItem('univers_shop_counted_session', 'true');
+      const todayStr = new Date().toLocaleDateString('fr-DZ', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).replace(/\//g, '-'); // Format as DD-MM-YYYY
+
+      const recordVisit = async () => {
+        try {
+          const docRef = doc(db, 'analytics', 'visits');
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            const total = (data.total || 0) + 1;
+            const daily = data.daily || {};
+            daily[todayStr] = (daily[todayStr] || 0) + 1;
+            await setDoc(docRef, { total, daily }, { merge: true });
+          } else {
+            await setDoc(docRef, {
+              total: 1,
+              daily: { [todayStr]: 1 }
+            });
+          }
+        } catch (err) {
+          console.warn('Analytics tracking bypassed or Firestore under quota:', err);
+        }
+      };
+      recordVisit();
+    }
   }, []);
 
   // One-time migration and cleanup of any existing demo products from Firestore
@@ -940,6 +977,19 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 selection:bg-sky-500 selection:text-white">
+      {settings.algeriaCupWinActive && (
+        <div className="bg-gradient-to-r from-emerald-600 via-white via-red-600 to-emerald-600 text-slate-900 py-3 px-4 text-center font-display font-black text-xs shadow-md flex items-center justify-center gap-2 overflow-hidden relative border-b border-emerald-500/20">
+          <div className="absolute inset-0 bg-black/5 select-none pointer-events-none mix-blend-overlay"></div>
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600"></span>
+          </span>
+          <span className="relative tracking-wider font-extrabold text-[#064e3b] dark:text-[#064e3b] uppercase flex items-center gap-1.5 flex-wrap justify-center">
+            🇩🇿 L'Algérie a gagné {settings.algeriaCupWinsCount || 1} match{(settings.algeriaCupWinsCount || 1) > 1 ? 's' : ''} f la Coupe du Monde 2026 ! Réduction de {((settings.algeriaCupWinsCount || 1) * 5)}% active automatiquement sur tout le site ! 🏆⚽🇩🇿
+          </span>
+        </div>
+      )}
+
       {settings.promoBannerActive && settings.promoBannerText && (
         <div className="bg-gradient-to-r from-red-600 via-amber-500 to-red-600 text-white py-2 px-4 text-center font-display font-medium text-xs shadow-md flex items-center justify-center gap-2 overflow-hidden relative">
           <div className="absolute inset-0 bg-white/10 select-none pointer-events-none mix-blend-overlay"></div>
@@ -1386,6 +1436,7 @@ export default function App() {
           onClose={() => setIsOrderPortalOpen(false)}
           sellerPhone={settings.sellerPhone}
           onShowToast={showToast}
+          storeSettings={settings}
         />
       )}
 

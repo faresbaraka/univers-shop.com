@@ -14,7 +14,8 @@ import {
   FileText,
   Clock
 } from 'lucide-react';
-import { Order } from '../types';
+import { Order, StoreSettings } from '../types';
+import DeliveryMap from './DeliveryMap';
 
 interface BuyerOrderPortalProps {
   orders: Order[];
@@ -22,9 +23,10 @@ interface BuyerOrderPortalProps {
   onClose: () => void;
   sellerPhone: string;
   onShowToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
+  storeSettings?: StoreSettings;
 }
 
-export default function BuyerOrderPortal({ orders, onUpdateOrderFields, onClose, sellerPhone, onShowToast }: BuyerOrderPortalProps) {
+export default function BuyerOrderPortal({ orders, onUpdateOrderFields, onClose, sellerPhone, onShowToast, storeSettings }: BuyerOrderPortalProps) {
   const [searchMethod, setSearchMethod] = useState<'id' | 'phone'>('phone');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Order[]>([]);
@@ -320,6 +322,9 @@ export default function BuyerOrderPortal({ orders, onUpdateOrderFields, onClose,
                         </div>
                       </div>
                     </div>
+
+                    {/* Live interactive map */}
+                    <DeliveryMap orderStatus={order.orderStatus} orderId={order.id} googleMapsApiKey={storeSettings?.googleMapsApiKey} customerWilaya={order.customerWilaya} customerAddress={order.customerAddress} />
 
                     {/* Order Details Matrix */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">

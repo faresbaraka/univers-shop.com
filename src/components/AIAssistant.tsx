@@ -57,7 +57,13 @@ export default function AIAssistant({ products, onAddToCart, onShowToast, onComp
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: newMessages,
-          products
+          products: products.map(p => ({
+            id: p.id,
+            name: p.name,
+            price: p.price,
+            description: p.description,
+            category: p.category
+          }))
         })
       });
 
@@ -65,17 +71,68 @@ export default function AIAssistant({ products, onAddToCart, onShowToast, onComp
         throw new Error("Impossible de joindre le serveur IA");
       }
 
-      const data = await response.json();
-      setMessages(prev => [...prev, { role: 'model', content: data.text }]);
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      if (!reader) {
+        throw new Error("Impossible de démarrer le flux de réponse.");
+      }
+
+      setIsLoading(false);
+      setMessages(prev => [...prev, { role: 'model', content: "" }]);
+
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const cleanLine = line.trim();
+          if (!cleanLine.startsWith('data: ')) continue;
+          
+          const jsonStr = cleanLine.substring(6).trim();
+          if (jsonStr === '[DONE]') continue;
+
+          try {
+            const data = JSON.parse(jsonStr);
+            if (data.error) {
+              throw new Error(data.error);
+            }
+            if (data.text) {
+              setMessages(prev => {
+                const next = [...prev];
+                const lastMsg = next[next.length - 1];
+                if (lastMsg && lastMsg.role === 'model') {
+                  lastMsg.content += data.text;
+                }
+                return next;
+              });
+            }
+          } catch (e) {
+            console.warn("Error parsing chunk:", e);
+          }
+        }
+      }
     } catch (err: any) {
       console.error(err);
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'model',
-          content: "Désolé, j'ai rencontré un petit problème de réseau. Pouvez-vous répéter votre question ? Je reste à votre entière disposition !"
+      setIsLoading(false);
+      setMessages(prev => {
+        // Remove empty last message if there's one
+        const next = [...prev];
+        if (next[next.length - 1]?.content === "") {
+          next.pop();
         }
-      ]);
+        return [
+          ...next,
+          {
+            role: 'model',
+            content: "Désolé, j'ai rencontré un petit problème de réseau. Pouvez-vous répéter votre question ? Je reste à votre entière disposition !"
+          }
+        ];
+      });
       onShowToast("Erreur de connexion avec le conseiller IA.", "error");
     } finally {
       setIsLoading(false);

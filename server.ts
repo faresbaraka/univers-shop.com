@@ -31,7 +31,8 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
   // Check if system credentials are ready
   app.get("/api/payments/config", (req, res) => {
@@ -43,10 +44,17 @@ async function startServer() {
 
   // AI Sales Assistant Endpoint
   app.post("/api/chat", async (req, res) => {
+    // Set headers for SSE streaming
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
     try {
       const { messages, products } = req.body;
       if (!Array.isArray(messages)) {
-        return res.status(400).json({ error: "Le paramètre 'messages' est requis et doit être un tableau." });
+        res.write(`data: ${JSON.stringify({ error: "Le paramètre 'messages' est requis et doit être un tableau." })}\n\n`);
+        return res.end();
       }
 
       const client = getGeminiClient();
@@ -78,7 +86,15 @@ async function startServer() {
                     `\n\nDites-moi votre **âge**, votre **taille** et votre **style préféré** pour que je compose votre look idéal !`;
           }
         }
-        return res.json({ text: reply });
+
+        // Stream the simulated response word-by-word with very minor delay
+        const words = reply.split(/(\s+)/);
+        for (const word of words) {
+          res.write(`data: ${JSON.stringify({ text: word })}\n\n`);
+          await new Promise(resolve => setTimeout(resolve, 8));
+        }
+        res.write(`data: [DONE]\n\n`);
+        return res.end();
       }
 
       const systemInstruction = `Tu es Yanis, le styliste et conseiller de mode virtuel d'Univers Shop, un site e-commerce algérien haut de gamme de prêt-à-porter.
@@ -107,7 +123,8 @@ ${JSON.stringify(products || [], null, 2)}
         parts: [{ text: msg.content }]
       }));
 
-      const response = await client.models.generateContent({
+      // Initiate streaming request to Gemini 3.5 Flash
+      const responseStream = await client.models.generateContentStream({
         model: "gemini-3.5-flash",
         contents,
         config: {
@@ -116,10 +133,18 @@ ${JSON.stringify(products || [], null, 2)}
         }
       });
 
-      return res.json({ text: response.text });
+      for await (const chunk of responseStream) {
+        if (chunk.text) {
+          res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
+        }
+      }
+
+      res.write(`data: [DONE]\n\n`);
+      return res.end();
     } catch (err: any) {
       console.error("Erreur dans l'API de chat de l'assistant IA:", err);
-      return res.status(500).json({ error: "Une erreur technique est survenue au niveau du conseiller IA.", details: err.message });
+      res.write(`data: ${JSON.stringify({ error: "Une erreur technique est survenue au niveau du conseiller IA.", details: err.message })}\n\n`);
+      return res.end();
     }
   });
 
