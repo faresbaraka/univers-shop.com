@@ -16,6 +16,7 @@ interface NavbarProps {
   onOpenQuestLog?: () => void;
   language?: Language;
   onLanguageChange?: (lang: Language) => void;
+  onOpenLanguageHub?: () => void;
 }
 
 export default function Navbar({ 
@@ -30,7 +31,8 @@ export default function Navbar({
   userPoints = 0,
   onOpenQuestLog,
   language = 'fr',
-  onLanguageChange
+  onLanguageChange,
+  onOpenLanguageHub
 }: NavbarProps) {
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [pinCode, setPinCode] = useState('');
@@ -129,6 +131,21 @@ export default function Navbar({
               </button>
             )}
 
+            {/* LingoUnivers Collaboration portal link */}
+            {!isAdmin && onOpenLanguageHub && (
+              <button
+                onClick={onOpenLanguageHub}
+                className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer relative"
+                id="language-hub-trigger-btn"
+                title="Apprendre des langues & Gagner des cadeaux"
+              >
+                <span className="absolute -top-1.5 -right-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-500 text-[8px] font-black text-white ring-1 ring-white">
+                  XP
+                </span>
+                <span>🎓 {language === 'ar' ? 'تعلم اللغات' : language === 'en' ? 'LingoUnivers' : 'Apprendre Langues'}</span>
+              </button>
+            )}
+
             {/* Gamified Missions & Level Badge */}
             {!isAdmin && onOpenQuestLog && (
               <button
@@ -208,6 +225,18 @@ export default function Navbar({
               className="w-full flex items-center justify-center gap-1.5 bg-[#0052FF]/10 text-[#0052FF] text-xs font-bold py-3 px-4 rounded-xl hover:bg-[#0052FF]/15 transition-all cursor-pointer"
             >
               <span>📦 {language === 'ar' ? 'تتبع طلبي والإرجاع' : 'Suivre mon colis & Retours'}</span>
+            </button>
+          )}
+
+          {!isAdmin && onOpenLanguageHub && (
+            <button
+              onClick={() => {
+                onOpenLanguageHub();
+                setMobileMenuOpen(false);
+              }}
+              className="w-full flex items-center justify-center gap-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold py-3 px-4 rounded-xl hover:bg-indigo-100 transition-all cursor-pointer"
+            >
+              <span>🎓 {language === 'ar' ? 'بوابة اللغات ومكافآت المتجر' : 'Apprendre des Langues & Gagner'}</span>
             </button>
           )}
 

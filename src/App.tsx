@@ -31,6 +31,7 @@ import AIAssistant from './components/AIAssistant';
 import DiscountWheel from './components/DiscountWheel';
 import QuestSystem from './components/QuestSystem';
 import CustomerReviews from './components/CustomerReviews';
+import LanguageLearningPortal from './components/LanguageLearningPortal';
 import { BackToTopButton } from './components/AIEnhancedSuite';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
@@ -217,6 +218,14 @@ export default function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isOrderPortalOpen, setIsOrderPortalOpen] = useState(false);
+  const [isLanguageHubOpen, setIsLanguageHubOpen] = useState(false);
+  const [appMode, setAppMode] = useState<'shop' | 'lingo'>(() => {
+    try {
+      return (localStorage.getItem('lingo_univers_app_mode') as 'shop' | 'lingo') || 'shop';
+    } catch (_) {
+      return 'shop';
+    }
+  });
 
   // AI Suite state
   const [aiState, setAiState] = useState<AISuiteState>(DEFAULT_AI_STATE);
@@ -1085,6 +1094,10 @@ export default function App() {
         onOpenQuestLog={() => setIsQuestLogOpen(true)}
         language={language}
         onLanguageChange={setLanguage}
+        onOpenLanguageHub={() => {
+          setAppMode('lingo');
+          localStorage.setItem('lingo_univers_app_mode', 'lingo');
+        }}
       />
 
       {/* Primary viewport switch */}
@@ -1106,6 +1119,19 @@ export default function App() {
           onUpdateAIState={handleUpdateAIState}
           onRunAISimulation={handleRunAISimulation}
         />
+      ) : appMode === 'lingo' ? (
+        <main className="flex-grow animate-fade-in bg-indigo-950/5">
+          <LanguageLearningPortal 
+            language={language}
+            userPoints={userPoints}
+            onAddPoints={handleAddPoints}
+            onShowToast={showToast}
+            onClose={() => {
+              setAppMode('shop');
+              localStorage.setItem('lingo_univers_app_mode', 'shop');
+            }}
+          />
+        </main>
       ) : (
         /* CLIENT STOREFRONT VIEW */
         <main className="flex-grow animate-fade-in py-4">
@@ -1228,6 +1254,54 @@ export default function App() {
                   </p>
                 </div>
 
+              </div>
+            </div>
+          </div>
+
+          {/* LingoUnivers Partner Application Launcher Banner */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-6">
+            <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-r from-indigo-900 via-indigo-950 to-purple-950 border border-indigo-500/25 p-6 sm:p-8 md:p-10 shadow-xl text-white">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(99,102,241,0.15),transparent)] pointer-events-none"></div>
+              <div className="absolute -top-12 -right-12 h-44 w-44 bg-purple-500/10 rounded-full blur-3xl pointer-events-none"></div>
+              
+              <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
+                <div className="space-y-3 max-w-2xl">
+                  <span className="inline-flex items-center gap-1.5 bg-indigo-500/20 text-indigo-300 text-xs font-black px-3.5 py-1.5 rounded-full border border-indigo-500/30 uppercase tracking-widest leading-none">
+                    🎓 Application Partenaire Officielle
+                  </span>
+                  <h2 className="font-display font-black text-2xl sm:text-3xl text-white tracking-tight leading-tight">
+                    {language === 'ar' ? 'تطبيق LingoUnivers : تعلم اللغات ووفر أموالك !' : 'Application LingoUnivers : Parlez Couramment & Économisez Réellement !'}
+                  </h2>
+                  <p className="text-white/80 text-xs sm:text-sm leading-relaxed">
+                    {language === 'ar' 
+                      ? 'ادخل إلى عالم LingoUnivers! أكمل تمرينًا مدته ٥ دقائق في اللغة الإنجليزية أو الإسبانية أو الألمانية أو الفرنسية، واحصل على قسائم خصم حقيقية تصل إلى ٣٠٪ لطلبياتك القادمة في متجرنا.' 
+                      : 'Rejoignez la révolution de l\'e-learning ! Suivez notre cursus d\'élite de 1 an (12 mois d\'étude), complétez des mini-jeux éducatifs de 5 minutes et convertissez vos XP en codes de réduction instantanés pour Univers Shop !'
+                    }
+                  </p>
+                  
+                  {/* Features list */}
+                  <div className="flex flex-wrap gap-x-6 gap-y-2 pt-2 text-[11px] text-indigo-200 font-bold">
+                    <span className="flex items-center gap-1">✅ Programme complet de 12 Mois</span>
+                    <span className="flex items-center gap-1">🏆 Badges de Niveau Intuitifs</span>
+                    <span className="flex items-center gap-1">💎 Conversion XP en Bons d'achats</span>
+                    <span className="flex items-center gap-1">🔒 Connexion Google Intégrée</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setAppMode('lingo');
+                      localStorage.setItem('lingo_univers_app_mode', 'lingo');
+                    }}
+                    className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-400 hover:to-pink-400 text-white font-black text-sm px-8 py-4 rounded-2xl shadow-lg shadow-indigo-500/35 hover:scale-[1.03] active:scale-95 transition-all cursor-pointer border border-white/10 uppercase tracking-wider"
+                    id="storefront-lingo-launcher"
+                  >
+                    <span>🎓 Lancer LingoUnivers</span>
+                    <span className="text-lg">➔</span>
+                  </button>
+                  <span className="text-[10px] text-indigo-300 font-medium">Basculez instantanément sans quitter le site</span>
+                </div>
               </div>
             </div>
           </div>
