@@ -2164,8 +2164,22 @@ const getCurriculum = (lang: string, level: SkillLevel, category?: LearningCateg
   
   return finalMonths.map((m) => {
     const lessonPhrases: Phrase[] = m.phrases.map((p) => {
-      const foreignPhrase = p.phrase[lang] || p.phrase['en'];
-      const pronun = p.pronunciation[lang] || p.pronunciation['en'] || foreignPhrase;
+      let foreignPhrase = '';
+      if (typeof p.phrase === 'string') {
+        foreignPhrase = p.phrase;
+      } else if (p.phrase && typeof p.phrase === 'object') {
+        foreignPhrase = (p.phrase as any)[lang] || (p.phrase as any)['en'] || (p.phrase as any)['fr'] || Object.values(p.phrase)[0] || '';
+      }
+      
+      let pronun = '';
+      if (typeof p.pronunciation === 'string') {
+        pronun = p.pronunciation;
+      } else if (p.pronunciation && typeof p.pronunciation === 'object') {
+        pronun = (p.pronunciation as any)[lang] || (p.pronunciation as any)['en'] || (p.pronunciation as any)['fr'] || Object.values(p.pronunciation)[0] || foreignPhrase;
+      } else {
+        pronun = foreignPhrase;
+      }
+
       return {
         phrase: foreignPhrase,
         translation: p.translation,
@@ -2761,6 +2775,16 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
   };
 
   // START DYNAMIC AI SESSION (Gemini Exercise Generator)
+  const ensureString = (val: any): string => {
+    if (!val) return '';
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object') {
+      if (Array.isArray(val)) return val.join(' ');
+      return val[targetLang] || val['en'] || val['fr'] || val[Object.keys(val)[0]] || '';
+    }
+    return String(val);
+  };
+
   const startDynamicAISession = async () => {
     setIsAILoading(true);
     setIsActiveSession(true);
@@ -2781,8 +2805,8 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
       const quiz = await response.json();
 
       // 1. Setup match pairs
-      const leftSide = quiz.matchPairs.map((p: any) => p.foreign).sort(() => Math.random() - 0.5);
-      const rightSide = quiz.matchPairs.map((p: any) => p.native).sort(() => Math.random() - 0.5);
+      const leftSide = quiz.matchPairs.map((p: any) => ensureString(p.foreign)).sort(() => Math.random() - 0.5);
+      const rightSide = quiz.matchPairs.map((p: any) => ensureString(p.native)).sort(() => Math.random() - 0.5);
       setMatchLeft(leftSide);
       setMatchRight(rightSide);
       setSolvedPairs([]);
@@ -2794,22 +2818,22 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
 
       // 2. Setup Word Bank
       const phraseObj = {
-        phrase: quiz.wordBank.targetPhrase,
-        translation: quiz.wordBank.translation,
-        translationAr: quiz.wordBank.translation, // fallback
-        pronunciation: quiz.wordBank.pronunciation,
+        phrase: ensureString(quiz.wordBank.targetPhrase),
+        translation: ensureString(quiz.wordBank.translation),
+        translationAr: ensureString(quiz.wordBank.translation), // fallback
+        pronunciation: ensureString(quiz.wordBank.pronunciation),
         context: "Exercice IA"
       };
       setWordBankTargetPhrase(phraseObj as any);
-      setAvailableWords(quiz.wordBank.availableWords);
+      setAvailableWords(Array.isArray(quiz.wordBank.availableWords) ? quiz.wordBank.availableWords.map((w: any) => ensureString(w)) : []);
       setSelectedWords([]);
       setWordBankSubmitted(false);
       setWordBankIsCorrect(false);
 
       // 3. Setup Multiple Choice
       setMultipleChoiceIndex(0);
-      setMultipleChoiceOptions(quiz.multipleChoice.options);
-      setMultipleChoiceCorrectIndex(quiz.multipleChoice.correctIndex);
+      setMultipleChoiceOptions(Array.isArray(quiz.multipleChoice.options) ? quiz.multipleChoice.options.map((o: any) => ensureString(o)) : []);
+      setMultipleChoiceCorrectIndex(Number(quiz.multipleChoice.correctIndex) || 0);
       setSelectedMCAnswer(null);
       setMcSubmitted(false);
 
@@ -2820,10 +2844,10 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
         pronunciation: quiz.wordBank.pronunciation
       };
       const phraseObj4 = {
-        phrase: geminiWritten.correctTranslation,
-        translation: geminiWritten.targetPhrase,
-        translationAr: geminiWritten.targetPhrase,
-        pronunciation: geminiWritten.pronunciation,
+        phrase: ensureString(geminiWritten.correctTranslation),
+        translation: ensureString(geminiWritten.targetPhrase),
+        translationAr: ensureString(geminiWritten.targetPhrase),
+        pronunciation: ensureString(geminiWritten.pronunciation),
         context: "Traduction écrite générée"
       };
       setWrittenTargetPhrase(phraseObj4 as any);
@@ -2837,9 +2861,9 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
         isTrue: true,
         explanation: "La maîtrise du lexique et des tournures idiomatiques renforce la confiance lors de vos interactions réelles."
       };
-      setTrueFalseQuestion(geminiTF.question);
-      setTrueFalseCorrect(geminiTF.isTrue);
-      setTrueFalseExplanation(geminiTF.explanation);
+      setTrueFalseQuestion(ensureString(geminiTF.question));
+      setTrueFalseCorrect(!!geminiTF.isTrue);
+      setTrueFalseExplanation(ensureString(geminiTF.explanation));
       setTrueFalseUserChoice(null);
       setTrueFalseSubmitted(false);
 
@@ -2990,7 +3014,15 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
       console.error("Speech recognition error:", e);
       setIsListening(false);
       setCallStatus('active');
-      onShowToast("Erreur de micro. Réessayez.", "error");
+      let msg = "Erreur de micro. Réessayez.";
+      if (e.error === 'not-allowed') {
+        msg = "Accès au micro refusé. Autorisez le micro dans votre navigateur ou ouvrez l'application dans un nouvel onglet.";
+      } else if (e.error === 'no-speech') {
+        msg = "Aucune parole détectée. Veuillez parler bien en face de votre micro.";
+      } else if (e.error === 'network') {
+        msg = "Erreur réseau lors de la reconnaissance vocale.";
+      }
+      onShowToast(msg, "error");
     };
 
     rec.onend = () => {
@@ -5315,15 +5347,15 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                   <div className="flex flex-col md:flex-row items-center justify-between gap-4 border-b border-indigo-950 pb-4">
                     <div>
                       <h2 className="font-display font-black text-xl text-slate-100 flex items-center gap-2">
-                        📞 Appel Vocal Direct avec Coach IA
+                        📞 Appel Vocal Direct avec Lia, votre Coach IA
                       </h2>
                       <p className="text-xs text-slate-400 mt-1">
-                        Discutez de vive voix avec Anis, votre coach d'affaires Gemini. Il vous guidera, posera des questions orales, et corrigera votre grammaire en direct !
+                        Discutez de vive voix avec Lia, votre coach linguistique d'élite. Elle évaluera vos buts, vos difficultés et vous guidera pas-à-pas !
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2.5 py-1 rounded">
-                        Wilaya Server Direct Link
+                      <span className="text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded">
+                        Lia Voice Engine 2.5
                       </span>
                     </div>
                   </div>
@@ -5336,14 +5368,14 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                       <div className="lg:col-span-1 bg-slate-950 border-2 border-indigo-950/80 rounded-3xl p-6 flex flex-col justify-between min-h-[420px] relative overflow-hidden shadow-2xl">
                         
                         {/* Glowing Background Glows */}
-                        <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-indigo-500/10 to-transparent blur-3xl rounded-full"></div>
+                        <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-emerald-500/10 to-transparent blur-3xl rounded-full"></div>
 
                         {/* Top info */}
                         <div className="text-center space-y-1 relative z-10">
                           <span className="text-[10px] uppercase font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full animate-pulse inline-block">
-                            {callStatus === 'connecting' ? 'Connexion...' : callStatus === 'listening' ? 'À vous de parler...' : callStatus === 'coach_speaking' ? 'Anis parle...' : 'Appel actif'}
+                            {callStatus === 'connecting' ? 'Connexion...' : callStatus === 'listening' ? 'À vous de parler...' : callStatus === 'coach_speaking' ? 'Lia parle...' : 'Appel actif'}
                           </span>
-                          <h4 className="font-display font-black text-slate-100 text-lg">Coach Anis (Gemini)</h4>
+                          <h4 className="font-display font-black text-slate-100 text-lg">Coach Lia (Gemini)</h4>
                           <p className="text-xs text-slate-400">Pratique : {selectedCategory.toUpperCase()}</p>
                           <p className="font-mono text-sm text-indigo-400 font-bold pt-1">
                             {Math.floor(callTimer / 60).toString().padStart(2, '0')}:{ (callTimer % 60).toString().padStart(2, '0') }
@@ -5352,12 +5384,12 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
 
                         {/* Visual Avatar Waveform */}
                         <div className="flex flex-col items-center justify-center py-6 relative z-10">
-                          <div className={`h-24 w-24 rounded-full bg-indigo-600/20 border-2 border-indigo-500/40 flex items-center justify-center relative shadow-xl transition-all duration-300 ${callStatus === 'coach_speaking' ? 'scale-110 border-emerald-400/80 ring-8 ring-emerald-500/10' : callStatus === 'listening' ? 'scale-110 border-amber-400/80 ring-8 ring-amber-500/10' : ''}`}>
-                            <span className="text-4xl">🤖</span>
+                          <div className={`h-24 w-24 rounded-full bg-emerald-600/20 border-2 border-emerald-500/40 flex items-center justify-center relative shadow-xl transition-all duration-300 ${callStatus === 'coach_speaking' ? 'scale-110 border-emerald-400/80 ring-8 ring-emerald-500/10' : callStatus === 'listening' ? 'scale-110 border-amber-400/80 ring-8 ring-amber-500/10' : ''}`}>
+                            <span className="text-4xl">🦊</span>
                             
                             {/* Animated Waves */}
                             {(callStatus === 'coach_speaking' || callStatus === 'listening') && (
-                              <div className="absolute inset-0 rounded-full border border-indigo-500/40 animate-ping opacity-50"></div>
+                              <div className="absolute inset-0 rounded-full border border-emerald-500/40 animate-ping opacity-50"></div>
                             )}
                           </div>
 
@@ -5431,17 +5463,19 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                         <div className="bg-[#141830] border border-indigo-950/80 p-5 rounded-2xl space-y-2">
                           <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest block">🎯 Mission de Parole Actuelle</span>
                           <p className="text-sm font-black text-slate-100">
-                            {currentTaskText || "Écoutez les consignes d'Anis pour démarrer la pratique de parole."}
+                            {currentTaskText || "Écoutez les consignes de Lia pour démarrer la pratique de parole."}
                           </p>
                           <p className="text-[11px] text-slate-400 leading-relaxed">
-                            Activez le microphone, parlez en prononçant ou traduisant la phrase demandée. Anis analysera automatiquement votre transcription vocale pour détecter des corrections !
+                            Activez le microphone, parlez en prononçant ou traduisant la phrase demandée. 
+                            <br />
+                            <b className="text-amber-400">💡 Astuce d'élite :</b> Si vous ne trouvez pas la réponse, vous pouvez parler en français et dire simplement <span className="text-indigo-300 font-bold font-mono">"je ne sais pas"</span> ou demander de l'aide. Lia comprendra et vous expliquera tout de suite ce que vous n'avez pas compris !
                           </p>
                         </div>
 
                         {/* LIVE COACH FEEDBACK SHEET */}
                         {voiceCorrections ? (
-                          <div className="bg-emerald-500/10 border-2 border-emerald-500/30 p-5 rounded-3xl space-y-3 animate-fade-in">
-                            <span className="text-xs font-black text-emerald-400 uppercase tracking-widest block">💡 Correction instantanée d'Anis :</span>
+                           <div className="bg-emerald-500/10 border-2 border-emerald-500/30 p-5 rounded-3xl space-y-3 animate-fade-in">
+                            <span className="text-xs font-black text-emerald-400 uppercase tracking-widest block">💡 Correction & Analyse de Lia :</span>
                             <div className="text-xs text-slate-200 leading-relaxed space-y-2">
                               {voiceCorrections.split('\n').map((line, lIdx) => (
                                 <p key={lIdx}>{line}</p>
@@ -5455,7 +5489,7 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                           <div className="bg-[#0A0D1A]/60 border border-dashed border-indigo-950 p-6 rounded-3xl text-center space-y-2 py-10">
                             <span className="text-2xl block">💬</span>
                             <p className="text-xs text-slate-400 italic">En attente de votre parole vocale...</p>
-                            <p className="text-[10px] text-indigo-400/60 max-w-xs mx-auto">Parlez dans le combiné pour voir apparaître ici l'analyse détaillée de vos expressions.</p>
+                            <p className="text-[10px] text-indigo-400/60 max-w-xs mx-auto">Parlez dans le microphone pour voir s'afficher ici l'analyse, l'explication et la correction en direct de Lia.</p>
                           </div>
                         )}
 
@@ -5465,7 +5499,7 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                           <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
                             {callHistory.map((item, index) => (
                               <div key={index} className={`p-2.5 rounded-xl text-xs max-w-[85%] ${item.role === 'coach' ? 'bg-[#1A223F] text-slate-200 border border-indigo-950/30 mr-auto' : 'bg-indigo-600 text-white ml-auto'}`}>
-                                <p className="font-bold text-[9px] text-slate-400 uppercase tracking-widest mb-0.5">{item.role === 'coach' ? 'Coach Anis' : 'Moi (Vocal)'}</p>
+                                <p className="font-bold text-[9px] text-slate-400 uppercase tracking-widest mb-0.5">{item.role === 'coach' ? 'Coach Lia' : 'Moi (Vocal)'}</p>
                                 <p>{item.text}</p>
                               </div>
                             ))}
@@ -5482,9 +5516,9 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                       </div>
                       
                       <div className="space-y-2">
-                        <h3 className="font-display font-black text-xl text-slate-100">Discutez en direct avec votre tuteur IA d'élite</h3>
+                        <h3 className="font-display font-black text-xl text-slate-100">Discutez en direct avec Lia, votre tuteur IA</h3>
                         <p className="text-xs text-slate-400">
-                          Pratiquez l'anglais, l'espagnol ou l'allemand par commande vocale. Apprenez à formuler, commander, et répondre sous forme de vrai coup de téléphone !
+                          Pratiquez vos langues de prédilection par commande vocale sous forme de véritable coup de fil professionnel. Lia vous écoute, corrige vos erreurs et vous explique les notions floues !
                         </p>
                       </div>
 
@@ -5498,7 +5532,7 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                         onClick={startAICall}
                         className="w-full bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-black text-xs py-4 rounded-xl shadow-lg hover:shadow-emerald-500/20 hover:scale-105 active:scale-95 transition duration-300 cursor-pointer"
                       >
-                        Lancer l'Appel Vocal avec Anis
+                        Lancer l'Appel Vocal avec Lia
                       </button>
                     </div>
                   )}

@@ -339,51 +339,78 @@ Return ONLY valid JSON. Do not include markdown or backticks. Translate terms ac
 
         if (isStart) {
           speechText = lang === "es"
-            ? "¡Hola! Soy tu entrenador de idiomas Anis. Vamos a practicar para la categoría " + cat + ". Por favor, traduce al español: 'Combien coûte cette livraison ?'"
+            ? "¡Hola! Soy tu entrenadora de idiomas Lia. ¿Cuál es tu objetivo al aprender español y cuáles son tus puntos débiles? (En français : Quel est ton but et tes points faibles ?)"
             : lang === "de"
-            ? "Hallo! Ich bin dein Sprachtrainer Anis. Lass uns für " + cat + " üben. Bitte übersetze auf Deutsch: 'Combien coûte cette livraison ?'"
-            : "Hello! I am your language coach Anis. Let's practice for " + cat + ". Please translate to English: 'Combien coûte cette livraison ?'";
-          nextTask = "Traduire par message vocal : 'Combien coûte cette livraison ?'";
+            ? "Hallo! Ich bin deine Sprachtrainerin Lia. Was ist dein Ziel beim Deutschlernen und was sind deine Schwachstellen? (En français : Quel est ton but et tes points faibles ?)"
+            : "Hello! I am your language coach Lia. What is your goal in learning English and what are your main weaknesses? (En français : Quel est ton but et tes points faibles ?)";
+          corrections = "💡 Lia a lancé l'appel ! Dites-lui votre but d'apprentissage ou vos points faibles pour qu'elle puisse adapter ses exercices.";
+          nextTask = "Partage ton but ou tes points faibles (par exemple: parler, grammaire, voyager...)";
         } else {
           const userWords = transcription.toLowerCase();
-          const matchesCost = userWords.includes("how") || userWords.includes("much") || userWords.includes("cost") || userWords.includes("delivery") || userWords.includes("cuánto") || userWords.includes("cuesta") || userWords.includes("kostet");
-
-          if (matchesCost) {
+          const isUserLost = userWords.includes("sais pas") || userWords.includes("comprends pas") || userWords.includes("pas la réponse") || userWords.includes("aide") || userWords.includes("lost") || userWords.includes("perdu") || userWords.includes("pourquoi") || userWords.includes("connais pas");
+          
+          if (isUserLost) {
             speechText = lang === "es"
-              ? "¡Excelente traducción! Tu pronunciación es fantástica. Ahora, pronuncia esta frase: 'La entrega es muy rápida.'"
+              ? "No te preocupes. Estoy aquí para ayudarte. Vamos a ir paso a paso. Repite conmigo: '¿Cuánto cuesta?'"
               : lang === "de"
-              ? "Hervorragende Übersetzung! Deine Aussprache ist fantastisch. Jetzt sprich diesen Satz: 'Die Lieferung ist sehr schnell.'"
-              : "Excellent translation! Your pronunciation is fantastic. Now, please pronounce this phrase: 'The delivery is very fast.'";
-            corrections = `✨ Correction : Bravo ! Vous avez parfaitement traduit 'Combien coûte cette livraison' par '${transcription}'. Aucune faute détectée !`;
-            nextTask = lang === "es" ? "Prononcer : 'La entrega es muy rápida.'" : lang === "de" ? "Prononcer : 'Die Lieferung ist sehr schnell.'" : "Prononcer : 'The delivery is very fast.'";
+              ? "Keine Sorge. Ich bin hier, um dir zu helfen. Lass uns Schritt für Schritt gehen. Wiederhole mit mir: 'Wie viel kostet das?'"
+              : "Don't worry. I am here to help you. Let's go step by step. Repeat after me: 'How much does it cost?'";
+            corrections = `💡 Explication (Français) : C'est tout à fait normal de ne pas savoir ! L'apprentissage se fait par essais et erreurs. La phrase demandée signifie 'Combien coûte cette livraison ?'. En anglais, on dit 'How much does this delivery cost?'. N'hésite pas à répéter à ton rythme !`;
+            nextTask = "Répétez la phrase simple après Lia.";
           } else {
-            speechText = lang === "es"
-              ? "Está bien, pero podemos mejorar. Inténtalo de nuevo. Di: 'How much is the delivery?'"
-              : lang === "de"
-              ? "Es ist okay, aber wir können das verbessern. Versuche es noch einmal. Sag: 'How much is the delivery?'"
-              : "That is okay, but we can improve. Let's try again. Please say: 'How much is the delivery?'";
-            corrections = `💡 Conseil : Vous avez dit : "${transcription}". Pour traduire 'Combien coûte cette livraison', privilégiez "How much is the delivery?" ou "How much does the delivery cost?".`;
-            nextTask = "Prononcer : 'How much is the delivery?'";
+            const matchesCost = userWords.includes("how") || userWords.includes("much") || userWords.includes("cost") || userWords.includes("delivery") || userWords.includes("cuánto") || userWords.includes("cuesta") || userWords.includes("kostet") || userWords.includes("but") || userWords.includes("objectif") || userWords.includes("voyag") || userWords.includes("parler");
+
+            if (matchesCost) {
+              speechText = lang === "es"
+                ? "¡Excelente! Comprendo perfectamente tu situación. Vamos a practicar con esta frase de entrega: 'El envío es muy rápido.'"
+                : lang === "de"
+                ? "Hervorragend! Ich verstehe deine Situation vollkommen. Lass uns mit diesem Liefersatz üben: 'Die Lieferung ist sehr schnell.'"
+                : "Excellent! I understand your situation perfectly. Let's practice with this delivery phrase: 'The delivery is very fast.'";
+              corrections = `✨ Encouragement : Merveilleuse réponse ! Vous vous exprimez très bien. Nous allons progresser ensemble sur vos objectifs.`;
+              nextTask = lang === "es" ? "Prononcer : 'El envío es muy rápido.'" : lang === "de" ? "Prononcer : 'Die Lieferung ist sehr schnell.'" : "Prononcer : 'The delivery is very fast.'";
+            } else {
+              speechText = lang === "es"
+                ? "Interesante. Te escucho y quiero ayudarte. Dime, ¿puedes repetir: 'Quiero aprender rápido'?"
+                : lang === "de"
+                ? "Interessant. Ich höre dir zu und möchte dir helfen. Sag mir, kannst du wiederholen: 'Ich möchte schnell lernen'?"
+                : "Interesting. I am listening to you and want to help you. Tell me, can you repeat: 'I want to learn fast'?";
+              corrections = `💡 Conseil : J'ai bien reçu votre message : "${transcription}". Continuez à parler librement, je vais vous guider à chaque étape !`;
+              nextTask = "Répétez la phrase d'apprentissage.";
+            }
           }
         }
 
         return res.json({ speechText, corrections, nextTask });
       }
 
-      const prompt = `You are an elite, highly professional AI Language Coach named "Anis" simulating a realistic, highly immersive phone call with a student.
+      const prompt = `You are "Lia", an extremely warm, empathetic, and highly professional AI Language Coach simulating a realistic, highly immersive phone call with a student.
 The student has chosen to practice the language '${lang}' in the specialized context of their learning category: '${cat}' (e.g. travel, shipping logistics, living/working abroad, hobbies and entertainment).
 
-CRITICAL DIRECTIVES:
-1. TARGET LANGUAGE PURITY: You MUST write "speechText" 100% in the target language '${lang}'. NEVER include French or Arabic words inside "speechText" because it will be spoken out loud by a synthesizer configured for '${lang}' and will sound completely garbled if it contains other languages.
-2. PROFESSIONAL AND FLUENT: Speak like a native, seasoned professional tutor. Vary your responses and tasks so it does not feel repetitive. Sound encouraging, highly articulate, and natural.
-3. CONCISE DIALOGUE: Keep "speechText" extremely concise (exactly 1 to 3 sentences) so the audio synthesis remains responsive, fast-paced, and fluent.
-4. CORRECTION & ANALYSIS: Analyze the user's latest speech transcription: "${transcription || "(Started the call)"}". If there are any grammatical, vocabulary, or pronunciation errors, write extremely clear, actionable, and encouraging corrections in French or Arabic inside the "corrections" field. E.g. '• Correction: Vous avez dit "X", préférez "Y" pour être plus fluide.'
-5. NON-REPETITIVE TASKS: In the "nextTask" field, assign a new, varied action (e.g., situational questions, vocabulary challenges, or scenario-based translation) related to '${cat}'.
+CRITICAL CONVERSATIONAL DIRECTIVES (STRICTLY COMPLY WITH THE STUDENT'S INTENTION):
+1. INITIAL QUESTION (GOAL & WEAK POINT ASSESSMENT):
+   If this is the beginning of the call (i.e. transcription is empty, undefined, or indicates starting), Lia MUST ask the student (in target language '${lang}', followed by a brief, friendly French explanation) about:
+   - What is their language learning goal (but / objectif)?
+   - What is their main weakness or struggle (point faible / difficulté)?
+   Example speechText for English: "Hello! I am your language coach Lia. Welcome! What is your main goal in learning English, and what are your main weaknesses? Quel est ton but principal ou tes difficultés ?"
+
+2. GRACEFUL FRENCH FALLBACK & EMPOWERMENT:
+   If the student's transcription is in French or contains phrases of confusion/defeat like "je ne sais pas", "je ne comprends pas", "je comprends rien", "aide-moi", "je suis perdu", "je ne trouve pas la réponse" or any other French words:
+   - Lia must NOT get frustrated or stop. She must facilitate the student.
+   - Lia must explain what the student didn't understand. She should write a detailed, comforting explanation in French in the "corrections" field (explaining the grammar, vocabulary, or pronunciation they missed, breaking it down into simple terms).
+   - In "speechText" (spoken in target language '${lang}'), she should speak in a simplified, slow-paced target language to guide them, encouraging them and asking them to repeat a very basic, simple phrase first to build confidence.
+
+3. RESPOND TO ABSOLUTELY EVERYTHING:
+   The student might comment on other things, ask custom questions, or speak off-topic. You MUST respond to and acknowledge EVERYTHING the student says. Never ignore their inputs. If they are completely lost or speak French, respond in simple target language, validate their attempt, and write the helpful breakdown in French in the "corrections" field.
+
+4. DIALOGUE CONSTRAINTS:
+   - "speechText": Write this primarily in target language '${lang}' (so the speech synthesizer of '${lang}' reads it beautifully without sounding garbled). If the student is deeply lost, you may include very brief, clear French words, but keep the core spoken voice in '${lang}'. Keep it concise (1 to 3 short sentences).
+   - "corrections": Write this 100% in French or Arabic. This is shown on screen and read by the user. Use it to give amazing coaching tips, explain grammatical rules, translate phrases, and analyze the user's input: "${transcription || "(Connecting...)"}".
+   - "nextTask": A very short, clear instruction written in French on what the user should speak/do next.
 
 Format your output exactly as a single valid JSON object:
 {
   "speechText": "Your direct spoken response strictly in the target language '${lang}'",
-  "corrections": "Your detailed grammar/vocabulary corrections and feedback written in French or Arabic (e.g., '• Correction : Vous avez dit \"X\", dites plutôt \"Y\" pour être plus professionnel.'). If no errors, write a small, warm encouragement.",
+  "corrections": "Your detailed grammar/vocabulary corrections, conceptual explanation in French/Arabic, and warm encouragement.",
   "nextTask": "A short instruction indicating what the user should do or translate next, written in French"
 }`;
 
