@@ -9,6 +9,7 @@
     <link rel="icon" type="image/jpeg" href="/logo_univers_shop.jpg" />
     <link rel="shortcut icon" type="image/jpeg" href="/logo_univers_shop.jpg" />
     <link rel="apple-touch-icon" href="/logo_univers_shop.jpg" />
+    <link rel="manifest" href="/manifest.json" />
     
     <!-- Balises OpenGraph pour l'affichage sur les réseaux sociaux (Facebook, WhatsApp, Viber, etc.) -->
     <meta property="og:title" content="Univers Shop" />
@@ -19,6 +20,15 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('Service worker registered!', reg))
+            .catch(err => console.error('Service worker registration failed:', err));
+        });
+      }
+    </script>
   </body>
 </html>
 

@@ -123,9 +123,9 @@ ${JSON.stringify(products || [], null, 2)}
         parts: [{ text: msg.content }]
       }));
 
-      // Initiate streaming request to Gemini 3.5 Flash
+      // Initiate streaming request to Gemini 2.5 Flash
       const responseStream = await client.models.generateContentStream({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents,
         config: {
           systemInstruction,
@@ -228,6 +228,189 @@ ${JSON.stringify(products || [], null, 2)}
         error: "Erreur technique de traitement réseau dans le gateway de paiement.",
         details: err.message
       });
+    }
+  });
+
+  // Dynamic Gemini Language Exercises Generator Endpoint
+  app.post("/api/lingo/generate-exercises", async (req, res) => {
+    try {
+      const { category, targetLang } = req.body;
+      const cat = category || "commerce";
+      const lang = targetLang || "en";
+
+      const fallbackData = {
+        matchPairs: [
+          { foreign: lang === "es" ? "Pagar" : lang === "de" ? "Bezahlen" : "To pay", native: "Payer" },
+          { foreign: lang === "es" ? "Precio" : lang === "de" ? "Preis" : "Prix", native: "Prix" },
+          { foreign: lang === "es" ? "Descuento" : lang === "de" ? "Rabatt" : "Réduction", native: "Réduction" },
+          { foreign: lang === "es" ? "Factura" : lang === "de" ? "Rechnung" : "Facture", native: "Facture" }
+        ],
+        wordBank: {
+          targetPhrase: lang === "es" ? "Quiero pagar con tarjeta de crédito" : lang === "de" ? "Ich möchte mit Kreditkarte bezahlen" : "I want to pay with credit card",
+          translation: "Je veux payer par carte de crédit",
+          availableWords: lang === "es" 
+            ? ["Quiero", "pagar", "con", "tarjeta", "de", "crédito", "Alger", "CIB", "CCP"]
+            : lang === "de"
+            ? ["Ich", "möchte", "mit", "Kreditkarte", "bezahlen", "Alger", "CIB", "CCP"]
+            : ["I", "want", "to", "pay", "with", "credit", "card", "Alger", "CIB", "CCP"],
+          correctWords: lang === "es"
+            ? ["Quiero", "pagar", "con", "tarjeta", "de", "crédito"]
+            : lang === "de"
+            ? ["Ich", "möchte", "mit", "Kreditkarte", "bezahlen"]
+            : ["I", "want", "to", "pay", "with", "credit", "card"],
+          pronunciation: lang === "es" ? "ky-ay-ro pa-gar con tar-he-ta" : lang === "de" ? "ich mukh-te mit" : "ai wont tu pei..."
+        },
+        multipleChoice: {
+          targetPhrase: lang === "es" ? "¿Dónde está el centro comercial?" : lang === "de" ? "Wo ist das Einkaufszentrum?" : "Where is the shopping center?",
+          options: ["Où se trouve le centre commercial ?", "Combien coûte ce costume ?", "Puis-je avoir un reçu ?"],
+          correctIndex: 0,
+          pronunciation: lang === "es" ? "don-de es-ta el cen-tro" : lang === "de" ? "vo ist das" : "wear iz the..."
+        }
+      };
+
+      const client = getGeminiClient();
+      if (!client) {
+        console.log("Using rich offline fallbacks for dynamic exercise generation (Missing GEMINI_API_KEY).");
+        return res.json(fallbackData);
+      }
+
+      const prompt = `You are an expert language teacher. Generate an interactive quiz for a student learning the language with code '${lang}' in the category '${cat}'.
+You must return a single JSON object with the exact structure:
+{
+  "matchPairs": [
+    {"foreign": "word in target language relating to category", "native": "French translation"},
+    {"foreign": "word in target language relating to category", "native": "French translation"},
+    {"foreign": "word in target language relating to category", "native": "French translation"},
+    {"foreign": "word in target language relating to category", "native": "French translation"}
+  ],
+  "wordBank": {
+    "targetPhrase": "A full sentence in target language (e.g., 'I want to buy this')",
+    "translation": "French translation of that full sentence",
+    "availableWords": ["Word1", "Word2", "Word3", "distractor1", "distractor2", "distractor3"],
+    "correctWords": ["Word1", "Word2", "Word3"],
+    "pronunciation": "Phonetic pronunciation guide"
+  },
+  "multipleChoice": {
+    "targetPhrase": "Another phrase in target language to check comprehension",
+    "options": ["Correct French translation", "Incorrect translation 1", "Incorrect translation 2"],
+    "correctIndex": 0,
+    "pronunciation": "Phonetic pronunciation guide"
+  }
+}
+Return ONLY valid JSON. Do not include markdown or backticks. Translate terms accurately and make the content interesting and realistic for category '${cat}' (options: voyage, commerce, vivre_la_bas, loisir).`;
+
+      const response = await client.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          temperature: 0.8
+        }
+      });
+
+      const responseText = response.text || "";
+      try {
+        const parsed = JSON.parse(responseText.trim());
+        return res.json(parsed);
+      } catch (parseErr) {
+        console.error("Failed to parse Gemini response for exercises. Content was:", responseText);
+        return res.json(fallbackData);
+      }
+    } catch (err: any) {
+      console.error("Error in dynamic exercise generator:", err);
+      return res.status(500).json({ error: "Erreur lors de la génération d'exercices." });
+    }
+  });
+
+  // AI Voice Coach Call Session Endpoint
+  app.post("/api/lingo/voice-session", async (req, res) => {
+    try {
+      const { transcription, history, targetLang, category } = req.body;
+      const lang = targetLang || "en";
+      const cat = category || "voyage";
+
+      const client = getGeminiClient();
+      if (!client) {
+        // Fallback simulated chat coach
+        const isStart = !transcription;
+        let speechText = "";
+        let corrections = "";
+        let nextTask = "";
+
+        if (isStart) {
+          speechText = lang === "es"
+            ? "¡Hola! Soy tu entrenador de idiomas Anis. Vamos a practicar para la categoría " + cat + ". Por favor, traduce al español: 'Combien coûte cette livraison ?'"
+            : lang === "de"
+            ? "Hallo! Ich bin dein Sprachtrainer Anis. Lass uns für " + cat + " üben. Bitte übersetze auf Deutsch: 'Combien coûte cette livraison ?'"
+            : "Hello! I am your language coach Anis. Let's practice for " + cat + ". Please translate to English: 'Combien coûte cette livraison ?'";
+          nextTask = "Traduire par message vocal : 'Combien coûte cette livraison ?'";
+        } else {
+          const userWords = transcription.toLowerCase();
+          const matchesCost = userWords.includes("how") || userWords.includes("much") || userWords.includes("cost") || userWords.includes("delivery") || userWords.includes("cuánto") || userWords.includes("cuesta") || userWords.includes("kostet");
+
+          if (matchesCost) {
+            speechText = lang === "es"
+              ? "¡Excelente traducción! Tu pronunciación es fantástica. Ahora, pronuncia esta frase: 'La entrega es muy rápida.'"
+              : lang === "de"
+              ? "Hervorragende Übersetzung! Deine Aussprache ist fantastisch. Jetzt sprich diesen Satz: 'Die Lieferung ist sehr schnell.'"
+              : "Excellent translation! Your pronunciation is fantastic. Now, please pronounce this phrase: 'The delivery is very fast.'";
+            corrections = `✨ Correction : Bravo ! Vous avez parfaitement traduit 'Combien coûte cette livraison' par '${transcription}'. Aucune faute détectée !`;
+            nextTask = lang === "es" ? "Prononcer : 'La entrega es muy rápida.'" : lang === "de" ? "Prononcer : 'Die Lieferung ist sehr schnell.'" : "Prononcer : 'The delivery is very fast.'";
+          } else {
+            speechText = lang === "es"
+              ? "Está bien, pero podemos mejorar. Inténtalo de nuevo. Di: 'How much is the delivery?'"
+              : lang === "de"
+              ? "Es ist okay, aber wir können das verbessern. Versuche es noch einmal. Sag: 'How much is the delivery?'"
+              : "That is okay, but we can improve. Let's try again. Please say: 'How much is the delivery?'";
+            corrections = `💡 Conseil : Vous avez dit : "${transcription}". Pour traduire 'Combien coûte cette livraison', privilégiez "How much is the delivery?" ou "How much does the delivery cost?".`;
+            nextTask = "Prononcer : 'How much is the delivery?'";
+          }
+        }
+
+        return res.json({ speechText, corrections, nextTask });
+      }
+
+      const prompt = `You are an elite, highly professional AI Language Coach named "Anis" simulating a realistic, highly immersive phone call with a student.
+The student has chosen to practice the language '${lang}' in the specialized context of their learning category: '${cat}' (e.g. travel, shipping logistics, living/working abroad, hobbies and entertainment).
+
+CRITICAL DIRECTIVES:
+1. TARGET LANGUAGE PURITY: You MUST write "speechText" 100% in the target language '${lang}'. NEVER include French or Arabic words inside "speechText" because it will be spoken out loud by a synthesizer configured for '${lang}' and will sound completely garbled if it contains other languages.
+2. PROFESSIONAL AND FLUENT: Speak like a native, seasoned professional tutor. Vary your responses and tasks so it does not feel repetitive. Sound encouraging, highly articulate, and natural.
+3. CONCISE DIALOGUE: Keep "speechText" extremely concise (exactly 1 to 3 sentences) so the audio synthesis remains responsive, fast-paced, and fluent.
+4. CORRECTION & ANALYSIS: Analyze the user's latest speech transcription: "${transcription || "(Started the call)"}". If there are any grammatical, vocabulary, or pronunciation errors, write extremely clear, actionable, and encouraging corrections in French or Arabic inside the "corrections" field. E.g. '• Correction: Vous avez dit "X", préférez "Y" pour être plus fluide.'
+5. NON-REPETITIVE TASKS: In the "nextTask" field, assign a new, varied action (e.g., situational questions, vocabulary challenges, or scenario-based translation) related to '${cat}'.
+
+Format your output exactly as a single valid JSON object:
+{
+  "speechText": "Your direct spoken response strictly in the target language '${lang}'",
+  "corrections": "Your detailed grammar/vocabulary corrections and feedback written in French or Arabic (e.g., '• Correction : Vous avez dit \"X\", dites plutôt \"Y\" pour être plus professionnel.'). If no errors, write a small, warm encouragement.",
+  "nextTask": "A short instruction indicating what the user should do or translate next, written in French"
+}`;
+
+      const response = await client.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          temperature: 0.7
+        }
+      });
+
+      const responseText = response.text || "";
+      try {
+        const parsed = JSON.parse(responseText.trim());
+        return res.json(parsed);
+      } catch (parseErr) {
+        console.error("Failed to parse Gemini voice session response:", responseText);
+        return res.json({
+          speechText: "Pardon, je n'ai pas bien compris. Pouvez-vous répéter ?",
+          corrections: "• Une erreur technique de compréhension est survenue. Réessayez.",
+          nextTask: "Répétez votre phrase s'il vous plaît"
+        });
+      }
+    } catch (err: any) {
+      console.error("Error in AI voice call endpoint:", err);
+      return res.status(500).json({ error: "Erreur lors du traitement de l'appel vocal." });
     }
   });
 

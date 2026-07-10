@@ -41,7 +41,10 @@ import {
   Lock,
   Compass,
   HeartCrack,
-  Info
+  Info,
+  Phone,
+  Mic,
+  MicOff
 } from 'lucide-react';
 import { Language } from '../lib/translations';
 import confetti from 'canvas-confetti';
@@ -2235,6 +2238,186 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
     return (localStorage.getItem('lingo_univers_user_category') as LearningCategory) || 'voyage';
   });
 
+  // Level Assessment & Motivation Wizard states
+  const [isLevelTested, setIsLevelTested] = useState<boolean>(() => {
+    return localStorage.getItem('lingo_univers_level_tested') === 'true';
+  });
+  const [assessmentStep, setAssessmentStep] = useState<number>(0); // 0: Motivation & Lang, 1-3: Quiz Q1-Q3, 4: Results & Assigned Level
+  const [assessmentAnswers, setAssessmentAnswers] = useState<number[]>([]); // chosen options indices
+  const [assessmentSelectedOpt, setAssessmentSelectedOpt] = useState<number | null>(null);
+
+  const PLACEMENT_TEST_QUESTIONS: Record<string, Array<{
+    question: string;
+    options: string[];
+    correctIdx: number;
+    explanation: string;
+  }>> = {
+    en: [
+      {
+        question: "Comment dit-on 'Bonjour, j'aimerais commander un produit' en anglais ?",
+        options: [
+          "Hello, I would like to order a product",
+          "Goodbye, I want a refund",
+          "Please, can I have some water?"
+        ],
+        correctIdx: 0,
+        explanation: "'To order a product' signifie commander un produit en anglais professionnel."
+      },
+      {
+        question: "Traduisez : 'Où se trouve le colis de livraison ?'",
+        options: [
+          "What is the price of this?",
+          "Where is the delivery parcel?",
+          "How can I return this item?"
+        ],
+        correctIdx: 1,
+        explanation: "'Delivery parcel' fait référence au colis de livraison."
+      },
+      {
+        question: "Quelle est la traduction la plus professionnelle de : 'Je voudrais négocier un prix de gros' ?",
+        options: [
+          "I want a small discount",
+          "I am looking for cheap items",
+          "I would like to negotiate a wholesale price"
+        ],
+        correctIdx: 2,
+        explanation: "'Wholesale price' désigne un prix de gros d'un fournisseur."
+      }
+    ],
+    es: [
+      {
+        question: "Comment dit-on 'Bonjour, j'aimerais commander un produit' en espagnol ?",
+        options: [
+          "Hola, me gustaría pedir un producto",
+          "Adiós, quiero un reembolso",
+          "Por favor, ¿puedo tener agua?"
+        ],
+        correctIdx: 0,
+        explanation: "'Pedir un producto' signifie commander un produit en espagnol."
+      },
+      {
+        question: "Traduisez : 'Où se trouve le colis de livraison ?'",
+        options: [
+          "¿Cuál es el precio de esto?",
+          "¿Dónde está el paquete de entrega?",
+          "¿Cómo puedo devolver este artículo?"
+        ],
+        correctIdx: 1,
+        explanation: "'Paquete de entrega' désigne le colis de livraison."
+      },
+      {
+        question: "Quelle est la traduction la plus professionnelle de : 'Je voudrais négocier un prix de gros' ?",
+        options: [
+          "Quiero un pequeño descuento",
+          "Estoy buscando cosas baratas",
+          "Me gustaría negociar un precio al por mayor"
+        ],
+        correctIdx: 2,
+        explanation: "'Precio al por mayor' désigne un prix de gros."
+      }
+    ],
+    de: [
+      {
+        question: "Comment dit-on 'Bonjour, j'aimerais commander un produit' en allemand ?",
+        options: [
+          "Hallo, ich möchte ein Produkt bestellen",
+          "Auf Wiedersehen, ich will eine Erstattung",
+          "Bitte, kann ich Wasser haben?"
+        ],
+        correctIdx: 0,
+        explanation: "'Ein Produkt bestellen' signifie commander un produit en allemand."
+      },
+      {
+        question: "Traduisez : 'Où se trouve le colis de livraison ?'",
+        options: [
+          "Was kostet das?",
+          "Wo ist das Lieferpaket?",
+          "Wie kann ich diesen Artikel zurückgeben?"
+        ],
+        correctIdx: 1,
+        explanation: "'Lieferpaket' désigne le colis de livraison."
+      },
+      {
+        question: "Quelle est la traduction la plus professionnelle de : 'Je voudrais négocier un prix de gros' ?",
+        options: [
+          "Ich will einen kleinen Rabatt",
+          "Ich suche billige Sachen",
+          "Ich möchte einen Großhandelspreis aushandeln"
+        ],
+        correctIdx: 2,
+        explanation: "'Großhandelspreis' désigne un prix de gros."
+      }
+    ],
+    it: [
+      {
+        question: "Comment dit-on 'Bonjour, j'aimerais commander un produit' en italien ?",
+        options: [
+          "Ciao, vorrei ordinare un prodotto",
+          "Arrivederci, voglio un rimborso",
+          "Per favore, posso avere dell'acqua?"
+        ],
+        correctIdx: 0,
+        explanation: "'Ordinare un prodotto' signifie commander un produit en italien."
+      },
+      {
+        question: "Traduisez : 'Où se trouve le colis de livraison ?'",
+        options: [
+          "Qual è il prezzo di questo?",
+          "Dove si trova il pacco di consegna?",
+          "Come posso restituire questo articolo?"
+        ],
+        correctIdx: 1,
+        explanation: "'Pacco di consegna' désigne le colis de livraison."
+      },
+      {
+        question: "Quelle est la traduction la plus professionnelle de : 'Je voudrais négocier un prix de gros' ?",
+        options: [
+          "Voglio un piccolo sconto",
+          "Sto cercando cose economiche",
+          "Vorrei negoziare un prezzo all'ingrosso"
+        ],
+        correctIdx: 2,
+        explanation: "'Prezzo all'ingrosso' désigne un prix de gros."
+      }
+    ]
+  };
+
+  // Fallback function for languages not explicitly detailed above
+  const getPlacementQuestions = (lang: string) => {
+    return PLACEMENT_TEST_QUESTIONS[lang] || [
+      {
+        question: `Comment dit-on 'Bonjour, j'aimerais commander un produit' dans la langue sélectionnée (${lang.toUpperCase()}) ?`,
+        options: [
+          "Option correcte pour : commander un produit",
+          "Option incorrecte pour : demander un remboursement",
+          "Option incorrecte pour : dire au revoir"
+        ],
+        correctIdx: 0,
+        explanation: "La première option correspond à la traduction professionnelle demandée."
+      },
+      {
+        question: `Traduisez : 'Où se trouve le colis de livraison ?' (${lang.toUpperCase()})`,
+        options: [
+          "Quel est le prix ?",
+          "Option correcte pour : colis de livraison",
+          "Comment retourner cet article ?"
+        ],
+        correctIdx: 1,
+        explanation: "La deuxième option correspond à la localisation du colis."
+      },
+      {
+        question: `Quelle est la traduction de : 'Je voudrais négocier un prix de gros' (${lang.toUpperCase()}) ?`,
+        options: [
+          "Je veux un petit cadeau",
+          "Je cherche des prix pas chers",
+          "Option correcte pour : négocier un prix de gros"
+        ],
+        correctIdx: 2,
+        explanation: "La troisième option correspond à la négociation professionnelle."
+      }
+    ];
+  };
+
   useEffect(() => {
     localStorage.setItem('lingo_univers_user_category', selectedCategory);
   }, [selectedCategory]);
@@ -2303,6 +2486,153 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
   const [isActiveSession, setIsActiveSession] = useState<boolean>(false);
   const [exerciseIndex, setExerciseIndex] = useState<number>(0); // 0 = Match Pairs, 1 = Word Bank, 2 = Speech Choice, 3 = Complete Celebration
   const [exerciseErrorCount, setExerciseErrorCount] = useState<number>(0);
+
+  // Dynamic Gemini Exercises Mode
+  const [isDynamicAI, setIsDynamicAI] = useState<boolean>(false);
+  const [isAILoading, setIsAILoading] = useState<boolean>(false);
+
+  // AI Voice Call State
+  const [isCallActive, setIsCallActive] = useState<boolean>(false);
+  const [callStatus, setCallStatus] = useState<string>('idle'); // 'idle', 'dialing', 'connecting', 'active', 'coach_speaking', 'listening'
+  const [isMicMuted, setIsMicMuted] = useState<boolean>(false);
+  const [callHistory, setCallHistory] = useState<{role: 'coach' | 'user', text: string}[]>([]);
+  const [currentTaskText, setCurrentTaskText] = useState<string>('');
+  const [voiceCorrections, setVoiceCorrections] = useState<string>('');
+  const [isListening, setIsListening] = useState<boolean>(false);
+  const [transcribedText, setTranscribedText] = useState<string>('');
+  const [callTimer, setCallTimer] = useState<number>(0);
+
+  // Stage 4: Written Translation Typing State
+  const [writtenTargetPhrase, setWrittenTargetPhrase] = useState<Phrase | null>(null);
+  const [writtenUserAnswer, setWrittenUserAnswer] = useState<string>('');
+  const [writtenSubmitted, setWrittenSubmitted] = useState<boolean>(false);
+  const [writtenIsCorrect, setWrittenIsCorrect] = useState<boolean>(false);
+
+  // Stage 5: True or False State
+  const [trueFalseQuestion, setTrueFalseQuestion] = useState<string>('');
+  const [trueFalseCorrect, setTrueFalseCorrect] = useState<boolean>(true);
+  const [trueFalseExplanation, setTrueFalseExplanation] = useState<string>('');
+  const [trueFalseUserChoice, setTrueFalseUserChoice] = useState<boolean | null>(null);
+  const [trueFalseSubmitted, setTrueFalseSubmitted] = useState<boolean>(false);
+
+  // Static database of True/False questions for different scenarios/reasons for learning
+  const STATIC_TRUE_FALSE_DATABASE: Record<LearningCategory, { question: string; isTrue: boolean; explanation: string }[]> = {
+    voyage: [
+      {
+        question: "Dans les pays anglophones, il est d'usage de laisser un pourboire (tip) d'environ 15% à 20% au restaurant car le service n'est pas inclus.",
+        isTrue: true,
+        explanation: "Aux États-Unis ou au Canada, le service n'est pas inclus dans l'addition, et le pourboire constitue une part essentielle du salaire des serveurs."
+      },
+      {
+        question: "La formule de politesse anglaise 'How do you do?' appelle toujours une réponse détaillée sur sa santé.",
+        isTrue: false,
+        explanation: "'How do you do?' est une salutation formelle très classique qui signifie simplement 'Enchanté'. La réponse standard est de répéter 'How do you do?'."
+      },
+      {
+        question: "En voyage d'affaires international, l'usage de l'anglais britannique (UK) est juridiquement obligatoire pour tout contrat écrit.",
+        isTrue: false,
+        explanation: "L'anglais américain (US) ou un anglais international simplifié sont tout aussi acceptés et largement utilisés dans les affaires mondiales."
+      }
+    ],
+    livraison: [
+      {
+        question: "Avec l'application algérienne BaridiMob, vous pouvez transférer instantanément des fonds en utilisant simplement le numéro de téléphone mobile du destinataire.",
+        isTrue: true,
+        explanation: "BaridiMob permet le virement instantané via le numéro de mobile lié au compte CCP du destinataire, facilitant ainsi les transactions de livraison."
+      },
+      {
+        question: "La mention 'Cash on Delivery' (COD) signifie que l'acheteur doit obligatoirement régler sa commande à l'avance en ligne.",
+        isTrue: false,
+        explanation: "COD signifie 'Paiement à la livraison'. L'acheteur ne paie l'agent de livraison que lorsqu'il reçoit physiquement le colis entre ses mains."
+      },
+      {
+        question: "Les frais d'envoi CCP/BaridiMob en Algérie varient toujours selon la wilaya de destination parmi les 58 wilayas.",
+        isTrue: true,
+        explanation: "Les tarifs logistiques d'expédition nationale dépendent de la distance et de la wilaya de livraison (par exemple, wilayas du Nord vs Grand Sud)."
+      }
+    ],
+    vivre_la_bas: [
+      {
+        question: "Un contrat de bail (tenancy agreement) est un document purement facultatif lors de la location d'un logement à l'étranger.",
+        isTrue: false,
+        explanation: "Le bail est un contrat juridique obligatoire protégeant à la fois le propriétaire et le locataire, spécifiant le loyer et la durée d'occupation."
+      },
+      {
+        question: "Pour obtenir un permis de séjour (residency permit) dans un nouveau pays, il est courant de devoir présenter un justificatif de domicile local.",
+        isTrue: true,
+        explanation: "Les préfectures et ministères exigent presque systématiquement une preuve d'adresse locale (facture de fibre, bail) pour émettre une carte de résident."
+      },
+      {
+        question: "Le système national de santé ou d'assurance maladie (healthcare system) rembourse automatiquement les soins à 100% sans inscription préalable.",
+        isTrue: false,
+        explanation: "Une demande d'immatriculation administrative avec documents justificatifs est requise au préalable pour activer ses droits aux remboursements de santé."
+      }
+    ],
+    loisir: [
+      {
+        question: "Les jeux en ligne multijoueurs (multiplayer games) peuvent être pratiqués de manière fluide sans aucune connexion internet active.",
+        isTrue: false,
+        explanation: "Par définition, les jeux multijoueurs en ligne nécessitent une connexion réseau internet stable pour synchroniser les joueurs en temps réel."
+      },
+      {
+        question: "L'expression 'Gym membership' désigne l'abonnement annuel ou mensuel d'accès à une salle de sport et de musculation.",
+        isTrue: true,
+        explanation: "'Gym membership' est le terme standard anglais pour désigner l'abonnement à une salle de fitness."
+      },
+      {
+        question: "En photographie, un paysage urbain (urban landscape) se concentre uniquement sur la prise de vue de forêts vierges et de montagnes sauvages.",
+        isTrue: false,
+        explanation: "Un paysage urbain (cityscape) capture l'architecture, les gratte-ciels, les rues et les infrastructures des métropoles et des villes."
+      }
+    ]
+  };
+
+  // Submit written answer typing verification
+  const submitWrittenAnswer = () => {
+    if (!writtenTargetPhrase) return;
+    setWrittenSubmitted(true);
+    const correctPhrase = writtenTargetPhrase.phrase;
+    const userAnswer = writtenUserAnswer;
+    
+    const normalizeStr = (s: string) => s.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "").trim();
+    const isCorrect = normalizeStr(userAnswer) === normalizeStr(correctPhrase);
+    setWrittenIsCorrect(isCorrect);
+    
+    if (isCorrect) {
+      playSound('success');
+      triggerMascotReaction('excited', "C'est tout à fait ça ! Votre orthographe et grammaire sont au sommet !", "إجابتك صحيحة تماماً! إملاء وقواعد في القمة!");
+    } else {
+      playSound('error');
+      triggerMascotReaction('sad', `Aïe, la formulation exacte était : "${correctPhrase}"`, `الصياغة الصحيحة كانت: "${correctPhrase}"`);
+    }
+  };
+
+  // Submit true/false cultural choice
+  const submitTrueFalseAnswer = () => {
+    if (trueFalseUserChoice === null) return;
+    setTrueFalseSubmitted(true);
+    const isCorrect = trueFalseUserChoice === trueFalseCorrect;
+    
+    if (isCorrect) {
+      playSound('success');
+      triggerMascotReaction('happy', "Félicitations ! Vous avez vu juste sur ce fait culturel !", "تهانينا! لقد أصبت في هذه المعلومة الثقافية!");
+    } else {
+      playSound('error');
+      triggerMascotReaction('sad', "Erreur d'évaluation ! Lisez l'explication attentivement pour progresser.", "خطأ في التقييم! اقرأ التفسير بتمعن للمتابعة.");
+    }
+  };
+
+  useEffect(() => {
+    let interval: any;
+    if (isCallActive && callStatus !== 'idle' && callStatus !== 'connecting') {
+      interval = setInterval(() => {
+        setCallTimer(prev => prev + 1);
+      }, 1000);
+    } else {
+      setCallTimer(0);
+    }
+    return () => clearInterval(interval);
+  }, [isCallActive, callStatus]);
 
   // Match Pairs State
   const [matchLeft, setMatchLeft] = useState<string[]>([]);
@@ -2430,6 +2760,303 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
     }
   };
 
+  // START DYNAMIC AI SESSION (Gemini Exercise Generator)
+  const startDynamicAISession = async () => {
+    setIsAILoading(true);
+    setIsActiveSession(true);
+    setIsDynamicAI(true);
+    setExerciseIndex(0);
+    setExerciseErrorCount(0);
+    playSound('click');
+
+    try {
+      const response = await fetch('/api/lingo/generate-exercises', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: selectedCategory, targetLang: targetLang })
+      });
+
+      if (!response.ok) throw new Error("Génération échouée");
+
+      const quiz = await response.json();
+
+      // 1. Setup match pairs
+      const leftSide = quiz.matchPairs.map((p: any) => p.foreign).sort(() => Math.random() - 0.5);
+      const rightSide = quiz.matchPairs.map((p: any) => p.native).sort(() => Math.random() - 0.5);
+      setMatchLeft(leftSide);
+      setMatchRight(rightSide);
+      setSolvedPairs([]);
+      setSelectedLeftWord(null);
+      setSelectedRightWord(null);
+
+      // Overwrite MATCH_PAIRS_DATA cache for this session's categories
+      MATCH_PAIRS_DATA[targetLang] = quiz.matchPairs;
+
+      // 2. Setup Word Bank
+      const phraseObj = {
+        phrase: quiz.wordBank.targetPhrase,
+        translation: quiz.wordBank.translation,
+        translationAr: quiz.wordBank.translation, // fallback
+        pronunciation: quiz.wordBank.pronunciation,
+        context: "Exercice IA"
+      };
+      setWordBankTargetPhrase(phraseObj as any);
+      setAvailableWords(quiz.wordBank.availableWords);
+      setSelectedWords([]);
+      setWordBankSubmitted(false);
+      setWordBankIsCorrect(false);
+
+      // 3. Setup Multiple Choice
+      setMultipleChoiceIndex(0);
+      setMultipleChoiceOptions(quiz.multipleChoice.options);
+      setMultipleChoiceCorrectIndex(quiz.multipleChoice.correctIndex);
+      setSelectedMCAnswer(null);
+      setMcSubmitted(false);
+
+      // 4. Setup Stage 4: Written Translation from Gemini response, with fallback
+      const geminiWritten = quiz.writtenTranslation || {
+        targetPhrase: quiz.wordBank.translation,
+        correctTranslation: quiz.wordBank.targetPhrase,
+        pronunciation: quiz.wordBank.pronunciation
+      };
+      const phraseObj4 = {
+        phrase: geminiWritten.correctTranslation,
+        translation: geminiWritten.targetPhrase,
+        translationAr: geminiWritten.targetPhrase,
+        pronunciation: geminiWritten.pronunciation,
+        context: "Traduction écrite générée"
+      };
+      setWrittenTargetPhrase(phraseObj4 as any);
+      setWrittenUserAnswer('');
+      setWrittenSubmitted(false);
+      setWrittenIsCorrect(false);
+
+      // 5. Setup Stage 5: True/False from Gemini response, with fallback
+      const geminiTF = quiz.trueFalse || {
+        question: `Dans la catégorie "${selectedCategory}", une communication précise et contextuelle est la clé de la réussite d'un projet linguistique d'élite.`,
+        isTrue: true,
+        explanation: "La maîtrise du lexique et des tournures idiomatiques renforce la confiance lors de vos interactions réelles."
+      };
+      setTrueFalseQuestion(geminiTF.question);
+      setTrueFalseCorrect(geminiTF.isTrue);
+      setTrueFalseExplanation(geminiTF.explanation);
+      setTrueFalseUserChoice(null);
+      setTrueFalseSubmitted(false);
+
+      playSound('success');
+      triggerMascotReaction(
+        'excited',
+        "Génial ! Gemini a créé un parcours sur-mesure de 5 étapes d'exercices d'élite pour toi !",
+        "رائع! لقد أنشأ Gemini مجموعة مخصصة من 5 خطوات من التمارين لك!"
+      );
+    } catch (err) {
+      console.error(err);
+      onShowToast(language === 'ar' ? 'فشل الاتصال بـ Gemini. تم تفعيل وضع التدريب الاحتياطي.' : "Impossible de joindre Gemini. Lancement du mode entraînement de secours.", "info");
+      // Fallback: trigger normal session
+      startDuolingoSession('debutant');
+    } finally {
+      setIsAILoading(false);
+    }
+  };
+
+  // START AI VOICE CALL
+  const startAICall = async () => {
+    playSound('click');
+    setIsCallActive(true);
+    setCallStatus('dialing');
+    setCallHistory([]);
+    setVoiceCorrections('');
+    setCurrentTaskText('');
+    setTranscribedText('');
+    setCallTimer(0);
+
+    // Play simulated ringing tone
+    let ringCount = 0;
+    const playRing = () => {
+      try {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioContextClass) return;
+        const ctx = new AudioContextClass();
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc1.connect(gain);
+        osc2.connect(gain);
+        gain.connect(ctx.destination);
+        
+        osc1.frequency.setValueAtTime(400, ctx.currentTime);
+        osc2.frequency.setValueAtTime(450, ctx.currentTime);
+        gain.gain.setValueAtTime(0.04, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+        
+        osc1.start();
+        osc2.start();
+        osc1.stop(ctx.currentTime + 1.2);
+        osc2.stop(ctx.currentTime + 1.2);
+      } catch (_) {}
+    };
+
+    // Play first ring immediately
+    playRing();
+    const ringInterval = setInterval(() => {
+      ringCount++;
+      if (ringCount < 2) {
+        playRing();
+      } else {
+        clearInterval(ringInterval);
+      }
+    }, 1500);
+
+    // Simulated dial duration
+    setTimeout(async () => {
+      clearInterval(ringInterval);
+      setCallStatus('connecting');
+      try {
+        const response = await fetch('/api/lingo/voice-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetLang, category: selectedCategory, history: [] })
+        });
+
+        if (!response.ok) throw new Error("Call start error");
+
+        const data = await response.json();
+        setCallStatus('active');
+        setCallHistory([{ role: 'coach', text: data.speechText }]);
+        setCurrentTaskText(data.nextTask);
+
+        // Speak back using speechSynthesis
+        const voiceLang = TARGET_LANGUAGES.find(t => t.code === targetLang)?.voiceLang || 'en-US';
+        speakText(data.speechText, voiceLang);
+      } catch (err) {
+        console.error(err);
+        setCallStatus('active');
+        const fallbackMsg = "Hello! Let's practice. Can you translate: 'Combien coûte cette livraison ?'";
+        setCallHistory([{ role: 'coach', text: fallbackMsg }]);
+        setCurrentTaskText("Traduire : 'Combien coûte cette livraison ?'");
+        speakText(fallbackMsg, TARGET_LANGUAGES.find(t => t.code === targetLang)?.voiceLang || 'en-US');
+      }
+    }, 2500);
+  };
+
+  // END VOICE CALL
+  const endAICall = () => {
+    playSound('error');
+    setIsCallActive(false);
+    setCallStatus('idle');
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    if (isListening) {
+      try {
+        const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (SpeechRec) {
+          const r = new SpeechRec();
+          r.stop();
+        }
+      } catch (_) {}
+      setIsListening(false);
+    }
+  };
+
+  // WEB SPEECH RECOGNITION TRIGGER (Speak/Hold to talk)
+  const toggleListening = () => {
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRec) {
+      onShowToast(language === 'ar' ? 'التعرف على الصوت غير مدعوم في هذا المتصفح.' : "La reconnaissance vocale n'est pas supportée dans ce navigateur. Veuillez écrire manuellement ou utiliser Chrome/Safari.", "error");
+      return;
+    }
+
+    if (isListening) {
+      // Stop listening manually or let it end
+      setIsListening(false);
+      return;
+    }
+
+    playSound('pop');
+    setTranscribedText('');
+    setCallStatus('listening');
+
+    const rec = new SpeechRec();
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.lang = TARGET_LANGUAGES.find(t => t.code === targetLang)?.voiceLang || 'en-US';
+
+    rec.onstart = () => {
+      setIsListening(true);
+    };
+
+    rec.onerror = (e: any) => {
+      console.error("Speech recognition error:", e);
+      setIsListening(false);
+      setCallStatus('active');
+      onShowToast("Erreur de micro. Réessayez.", "error");
+    };
+
+    rec.onend = () => {
+      setIsListening(false);
+      if (callStatus === 'listening') {
+        setCallStatus('active');
+      }
+    };
+
+    rec.onresult = async (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      if (!transcript) return;
+      setTranscribedText(transcript);
+      
+      // Send transcribed speech to Gemini backend for review & continuation
+      submitVocalAnswer(transcript);
+    };
+
+    rec.start();
+  };
+
+  // SUBMIT TRANSCRIPTION TO GEMINI FOR INTERACTIVE CONVERSATION
+  const submitVocalAnswer = async (text: string) => {
+    setCallStatus('coach_speaking');
+    const updatedHistory = [...callHistory, { role: 'user' as const, text }];
+    setCallHistory(updatedHistory);
+
+    try {
+      const response = await fetch('/api/lingo/voice-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transcription: text,
+          history: updatedHistory.slice(-5), // Send last few messages
+          targetLang,
+          category: selectedCategory
+        })
+      });
+
+      if (!response.ok) throw new Error("Voice reply failed");
+
+      const data = await response.json();
+      setCallHistory(prev => [...prev, { role: 'coach', text: data.speechText }]);
+      setVoiceCorrections(data.corrections);
+      setCurrentTaskText(data.nextTask);
+
+      // Award XP for voice practice
+      setUserXp(prev => {
+        const nextXp = prev + 15;
+        localStorage.setItem('lingo_univers_xp', nextXp.toString());
+        return nextXp;
+      });
+
+      // Speak back
+      const voiceLang = TARGET_LANGUAGES.find(t => t.code === targetLang)?.voiceLang || 'en-US';
+      speakText(data.speechText, voiceLang);
+      setCallStatus('active');
+    } catch (err) {
+      console.error(err);
+      setCallStatus('active');
+      const fallbackSpeech = "Nice work! Now tell me, are you ready for more?";
+      setCallHistory(prev => [...prev, { role: 'coach', text: fallbackSpeech }]);
+      speakText(fallbackSpeech, TARGET_LANGUAGES.find(t => t.code === targetLang)?.voiceLang || 'en-US');
+    }
+  };
+
   // INIT ACTIVE EXERCISES
   const startDuolingoSession = (level: SkillLevel) => {
     if (hearts <= 0) {
@@ -2494,6 +3121,23 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
     setMultipleChoiceIndex(randomMCIdx);
     setSelectedMCAnswer(null);
     setMcSubmitted(false);
+
+    // 4. Init Stage 4: Written Translation (using an alternative phrase from the lesson if available)
+    const otherPhrases = currentLesson.content.filter((_, i) => i !== randomMCIdx);
+    const phraseObj4 = otherPhrases[Math.floor(Math.random() * otherPhrases.length)] || phraseObj;
+    setWrittenTargetPhrase(phraseObj4);
+    setWrittenUserAnswer('');
+    setWrittenSubmitted(false);
+    setWrittenIsCorrect(false);
+
+    // 5. Init Stage 5: True / False cultural question based on learning category
+    const tfList = STATIC_TRUE_FALSE_DATABASE[selectedCategory] || STATIC_TRUE_FALSE_DATABASE['voyage'];
+    const tfItem = tfList[Math.floor(Math.random() * tfList.length)];
+    setTrueFalseQuestion(tfItem.question);
+    setTrueFalseCorrect(tfItem.isTrue);
+    setTrueFalseExplanation(tfItem.explanation);
+    setTrueFalseUserChoice(null);
+    setTrueFalseSubmitted(false);
 
     triggerMascotReaction(
       'excited',
@@ -3054,14 +3698,327 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                 );
               })}
             </div>
+
+            <div className="pt-3">
+              <button
+                onClick={() => {
+                  setAssessmentStep(0);
+                  setAssessmentAnswers([]);
+                  setAssessmentSelectedOpt(null);
+                  setIsLevelTested(false);
+                  localStorage.removeItem('lingo_univers_level_tested');
+                  playSound('click');
+                  triggerMascotReaction('normal', "C'est parti pour réévaluer ton niveau !", "لنبدأ في إعادة تقييم مستواك الحالي !");
+                }}
+                className="w-full text-center text-[10px] text-indigo-400 hover:text-indigo-300 hover:underline bg-indigo-500/5 border border-indigo-500/20 py-2.5 rounded-xl transition font-black"
+              >
+                🔄 Refaire le test de niveau
+              </button>
+            </div>
           </div>
         </div>
 
         {/* MAIN BODY AREA: Active Sessions OR Standard Tab View */}
         <div className="lg:col-span-3 space-y-6">
           
-          {/* ACTIVE EXERCISE VIEW (DUOLINGO SIMULATION INTERACTIVE INTERFACE) */}
-          {isActiveSession ? (
+          {/* LEVEL PLACEMENT TEST & MOTIVATION WIZARD INTERCEPTOR */}
+          {!isLevelTested ? (
+            <div className="bg-[#0F1426] border border-indigo-500/30 rounded-3xl p-6 md:p-8 shadow-2xl relative space-y-6 animate-fade-in text-slate-100">
+              
+              {/* Placement Test Title Header */}
+              <div className="text-center space-y-2 pb-4 border-b border-indigo-950">
+                <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-indigo-600/20 text-indigo-400 text-xl border border-indigo-500/30">
+                  🎯
+                </div>
+                <h2 className="font-display font-black text-xl text-slate-100 uppercase tracking-tight">
+                  {language === 'ar' ? 'اختبار تحديد المستوى والدافع' : "Évaluation de Niveau & Motivation"}
+                </h2>
+                <p className="text-xs text-slate-400">
+                  {language === 'ar' 
+                    ? 'حدد دافعك واختبر مستواك لتخصيص تجربتك التعليمية بالكامل مع ديو !' 
+                    : "Déterminez votre motivation et testez votre niveau pour personnaliser entièrement votre parcours !"}
+                </p>
+              </div>
+
+              {/* STEP 0: MOTIVATION & INTEREST */}
+              {assessmentStep === 0 && (
+                <div className="space-y-6 animate-fade-in">
+                  <div className="space-y-2">
+                    <label className="text-xs font-black uppercase tracking-wider text-indigo-400 block">
+                      1. {language === 'ar' ? 'لماذا تريد تعلم اللغة ؟' : "Pourquoi voulez-vous apprendre cette langue ?"}
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {[
+                        { id: 'voyage', name: "Voyage & Tourisme ✈️", desc: "S'orienter, commander au restaurant, réserver un hôtel et voyager en toute confiance." },
+                        { id: 'livraison', name: "Commerce & Logistique 📦", desc: "Acheter en gros, négocier les tarifs fournisseurs et gérer les colis wilaya par wilaya." },
+                        { id: 'vivre_la_bas', name: "S'installer & Vivre là-bas 🏠", desc: "Louer un logement, s'intégrer socialement et gérer la bureaucratie de base." },
+                        { id: 'loisir', name: "Divertissement & Loisirs 🎭", desc: "Regarder des films en VO, comprendre les chansons et s'exprimer avec fluidité." }
+                      ].map((item) => {
+                        const isChosen = selectedCategory === item.id;
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => {
+                              setSelectedCategory(item.id as any);
+                              playSound('click');
+                            }}
+                            className={`p-4 rounded-2xl border text-left transition duration-300 active:scale-95 cursor-pointer flex flex-col justify-between h-full ${
+                              isChosen 
+                                ? 'border-indigo-500 bg-indigo-500/10 text-white ring-1 ring-indigo-500/30' 
+                                : 'border-indigo-950 bg-[#121630]/60 text-slate-300 hover:border-indigo-500/40'
+                            }`}
+                          >
+                            <span className="font-bold text-xs block mb-1">{item.name}</span>
+                            <span className="text-[10px] text-slate-400 leading-tight">{item.desc}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    <label className="text-xs font-black uppercase tracking-wider text-indigo-400 block">
+                      2. {language === 'ar' ? 'اختر لغة التعلم المستهدفة :' : "Quelle langue souhaitez-vous apprendre ?"}
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                      {TARGET_LANGUAGES.map((langOpt) => {
+                        const isChosen = targetLang === langOpt.code;
+                        return (
+                          <button
+                            key={langOpt.code}
+                            onClick={() => {
+                              setTargetLang(langOpt.code);
+                              localStorage.setItem('lingo_univers_target_lang', langOpt.code);
+                              playSound('click');
+                            }}
+                            className={`p-2.5 rounded-xl border text-center transition duration-200 active:scale-95 cursor-pointer text-xs font-bold ${
+                              isChosen 
+                                ? 'border-amber-500 bg-amber-500/15 text-white ring-1 ring-amber-500/30' 
+                                : 'border-indigo-950 bg-[#121630]/60 text-slate-400 hover:border-indigo-500/40'
+                            }`}
+                          >
+                            <span className="text-lg block mb-0.5">{langOpt.flag}</span>
+                            <span className="block text-[10px] truncate">{langOpt.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="pt-4 text-center">
+                    <button
+                      onClick={() => {
+                        setAssessmentStep(1);
+                        setAssessmentAnswers([]);
+                        setAssessmentSelectedOpt(null);
+                        playSound('click');
+                        triggerMascotReaction('normal', `Bonne chance pour ton test en ${TARGET_LANGUAGES.find(t=>t.code===targetLang)?.name} ! Voyons la question 1.`, "حظاً موفقاً في اختبار تحديد المستوى! لنبدأ بالرقم ١.");
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black px-8 py-3.5 rounded-xl transition shadow active:scale-95"
+                    >
+                      {language === 'ar' ? 'بدء اختبار تحديد المستوى 🚀' : "Lancer le test d'évaluation 🚀"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* STEPS 1, 2, 3: THE QUESTIONS */}
+              {assessmentStep >= 1 && assessmentStep <= 3 && (() => {
+                const questions = getPlacementQuestions(targetLang);
+                const currentQuestion = questions[assessmentStep - 1];
+                const hasSelected = assessmentSelectedOpt !== null;
+                const isCorrect = hasSelected && assessmentSelectedOpt === currentQuestion.correctIdx;
+
+                return (
+                  <div className="space-y-6 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/10 px-3 py-1 rounded-full">
+                        Question {assessmentStep} sur 3
+                      </span>
+                      <div className="w-1/3 h-2 bg-slate-950 rounded-full overflow-hidden border border-indigo-950">
+                        <div 
+                          className="h-full bg-indigo-500 transition-all duration-300"
+                          style={{ width: `${(assessmentStep / 3) * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    <div className="bg-[#131930] border border-indigo-950/80 p-5 rounded-2xl text-center space-y-3 relative">
+                      <button
+                        onClick={() => {
+                          const voiceLang = TARGET_LANGUAGES.find(t => t.code === targetLang)?.voiceLang || 'en-US';
+                          speakText(currentQuestion.question, voiceLang);
+                        }}
+                        className="absolute top-3 right-3 p-2 bg-indigo-600/25 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-xl transition"
+                        title="Écouter l'énoncé"
+                      >
+                        <Volume2 className="w-4 h-4" />
+                      </button>
+                      <p className="font-display font-black text-sm text-slate-100">
+                        {currentQuestion.question}
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      {currentQuestion.options.map((option, oIdx) => {
+                        const isChosen = assessmentSelectedOpt === oIdx;
+                        return (
+                          <button
+                            key={oIdx}
+                            disabled={hasSelected}
+                            onClick={() => {
+                              setAssessmentSelectedOpt(oIdx);
+                              if (oIdx === currentQuestion.correctIdx) {
+                                playSound('success');
+                                triggerMascotReaction('happy', "C'est exact ! Bien joué !", "ممتاز! إجابة صحيحة في الصميم!");
+                              } else {
+                                playSound('error');
+                                triggerMascotReaction('sad', `Aïe, ce n'est pas tout à fait ça.`, `أوه! هذه الإجابة غير دقيقة.`);
+                              }
+                            }}
+                            className={`w-full p-4 rounded-xl border text-left transition duration-200 text-xs font-bold flex items-center justify-between ${
+                              hasSelected 
+                                ? oIdx === currentQuestion.correctIdx
+                                  ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300'
+                                  : isChosen
+                                    ? 'border-rose-500 bg-rose-500/10 text-rose-300'
+                                    : 'border-indigo-950 bg-slate-950/30 text-slate-500'
+                                : isChosen 
+                                  ? 'border-indigo-500 bg-indigo-500/15 text-white' 
+                                  : 'border-indigo-950 bg-[#121630] hover:bg-[#1A1F3F] text-slate-200'
+                            }`}
+                          >
+                            <span>{option}</span>
+                            {hasSelected && oIdx === currentQuestion.correctIdx && (
+                              <CheckCircle className="w-4 h-4 text-emerald-400" />
+                            )}
+                            {hasSelected && isChosen && oIdx !== currentQuestion.correctIdx && (
+                              <X className="w-4 h-4 text-rose-400" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {hasSelected && (
+                      <div className="space-y-4 animate-fade-in pt-2">
+                        <div className={`p-4 rounded-xl text-[11px] leading-relaxed ${isCorrect ? 'bg-emerald-500/5 text-emerald-300 border border-emerald-500/20' : 'bg-rose-500/5 text-rose-300 border border-rose-500/20'}`}>
+                          <p className="font-extrabold uppercase mb-1">💡 {isCorrect ? "Explication de Duo" : "Explication corrective"}</p>
+                          <p>{currentQuestion.explanation}</p>
+                        </div>
+
+                        <div className="text-right">
+                          <button
+                            onClick={() => {
+                              setAssessmentAnswers(prev => [...prev, assessmentSelectedOpt]);
+                              setAssessmentSelectedOpt(null);
+                              playSound('click');
+                              if (assessmentStep < 3) {
+                                setAssessmentStep(assessmentStep + 1);
+                              } else {
+                                setAssessmentStep(4);
+                                triggerConfettiAnimation();
+                              }
+                            }}
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black px-6 py-2.5 rounded-xl transition shadow active:scale-95"
+                          >
+                            {assessmentStep < 3 ? "Question suivante ➡️" : "Voir mes résultats 🏆"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* STEP 4: ASSIGNED LEVEL CERTIFICATE */}
+              {assessmentStep === 4 && (() => {
+                const questions = getPlacementQuestions(targetLang);
+                let correctCount = 0;
+                assessmentAnswers.forEach((ans, idx) => {
+                  if (ans === questions[idx]?.correctIdx) correctCount++;
+                });
+
+                let assignedLevel: SkillLevel = 'debutant';
+                let levelName = 'Débutant (Level 1)';
+                let levelDesc = "Vous commencez votre apprentissage. Tout le cursus d'initiation et de conversation de base a été configuré pour vous !";
+                if (correctCount === 2) {
+                  assignedLevel = 'semipro';
+                  levelName = 'Semi-Pro (Level 2)';
+                  levelDesc = "Excellent niveau de base ! Vos leçons s'adapteront avec des phrases de transaction, d'expédition et de livraison wilaya par wilaya.";
+                } else if (correctCount === 3) {
+                  assignedLevel = 'pro';
+                  levelName = 'Professionnel (Level 3)';
+                  levelDesc = "Impressionnant ! Vous avez un niveau de conversation d'élite. Les thèmes avancés comme la négociation de gros et la gestion des litiges vous attendent !";
+                }
+
+                return (
+                  <div className="space-y-6 text-center animate-fade-in py-4">
+                    
+                    {/* Golden Certificate Border Box */}
+                    <div className="border-4 border-double border-amber-500/40 bg-gradient-to-b from-indigo-950/40 to-slate-950 p-6 rounded-3xl relative overflow-hidden space-y-4">
+                      <div className="absolute top-0 right-0 h-24 w-24 bg-amber-500/5 rounded-full blur-xl"></div>
+                      
+                      <div className="text-center">
+                        <span className="text-5xl animate-bounce block">👑</span>
+                        <h3 className="font-display font-black text-slate-100 text-lg uppercase tracking-wider mt-2">
+                          Certificat d'Évaluation de Niveau
+                        </h3>
+                        <p className="text-[10px] text-slate-400 font-mono tracking-widest uppercase">LingoUnivers Professional Academy</p>
+                      </div>
+
+                      <div className="border-t border-b border-indigo-900/50 py-4 my-2 space-y-2">
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          Ce document certifie que l'élève <span className="font-extrabold text-indigo-400">{googleUser ? googleUser.name : "Élève Élite Lingo"}</span> a complété l'évaluation avec un score de <span className="font-black text-emerald-400">{correctCount} / 3</span> réponses correctes.
+                        </p>
+                        <div className="bg-[#151B33] p-3 rounded-2xl inline-block max-w-xs text-center border border-indigo-950">
+                          <p className="text-[10px] text-amber-400 font-black uppercase tracking-wider">Niveau Attribué :</p>
+                          <p className="text-base font-black text-slate-100">{levelName}</p>
+                        </div>
+                      </div>
+
+                      <p className="text-[11px] text-slate-400 italic max-w-md mx-auto leading-relaxed">
+                        "{levelDesc}"
+                      </p>
+
+                      <div className="flex justify-between items-center pt-4 text-[10px] text-slate-500 font-mono">
+                        <div>
+                          <p>DATE D'ÉVALUATION</p>
+                          <p className="text-slate-300 font-bold">10 Juillet 2026</p>
+                        </div>
+                        <div className="bg-amber-500/15 border border-amber-500/30 text-amber-400 px-3 py-1 rounded-full font-black uppercase tracking-widest">
+                          Sceau d'Élite Lingo
+                        </div>
+                        <div>
+                          <p>DIRECTEUR ACADÉMIQUE</p>
+                          <p className="text-slate-300 font-bold italic font-display">DZ-Lingo Corp</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-2">
+                      <button
+                        onClick={() => {
+                          setSelectedLevel(assignedLevel);
+                          localStorage.setItem('lingo_univers_user_level', assignedLevel);
+                          localStorage.setItem('lingo_univers_level_tested', 'true');
+                          setIsLevelTested(true);
+                          playSound('celebrate');
+                          onShowToast(`Niveau ${levelName} enregistré !`, 'success');
+                          triggerMascotReaction('excited', `Parfait ! Ton parcours a été personnalisé pour le niveau "${levelName}". C'est parti ! 🚀`, "ممتاز! تم تخصيص مسارك التعليمي بنجاح! 🚀");
+                        }}
+                        className="bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-black text-xs px-8 py-3.5 rounded-xl transition duration-300 shadow-lg hover:shadow-emerald-500/20 active:scale-95 cursor-pointer"
+                      >
+                        Débuter mon aventure sur-mesure ! 🚀
+                      </button>
+                    </div>
+
+                  </div>
+                );
+              })()}
+
+            </div>
+          ) : isActiveSession ? (
             <div className="bg-[#0F1426] border-2 border-indigo-500/30 rounded-3xl p-6 md:p-8 shadow-2xl relative space-y-6 animate-fade-in">
               
               {/* Dynamic Session Progress Header */}
@@ -3088,12 +4045,12 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
               <div className="space-y-1.5">
                 <div className="flex justify-between text-[11px] text-indigo-400 font-bold">
                   <span>Progrès de l'exercice</span>
-                  <span>{Math.round(((exerciseIndex) / 3) * 100)}%</span>
+                  <span>{Math.round(((exerciseIndex) / 5) * 100)}%</span>
                 </div>
                 <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden border border-indigo-950/50">
                   <div 
                     className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-500 shadow-md"
-                    style={{ width: `${(exerciseIndex / 3) * 100}%` }}
+                    style={{ width: `${(exerciseIndex / 5) * 100}%` }}
                   ></div>
                 </div>
               </div>
@@ -3103,7 +4060,7 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                 <div className="space-y-6">
                   <div className="text-center">
                     <span className="text-[10px] bg-indigo-500/20 text-indigo-300 font-black px-3 py-1 rounded-full uppercase tracking-widest">
-                      Étape 1 sur 3
+                      Étape 1 sur 5
                     </span>
                     <h3 className="font-display font-black text-xl text-slate-100 mt-2">
                       Associez les paires de mots
@@ -3180,7 +4137,7 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                 <div className="space-y-6">
                   <div className="text-center">
                     <span className="text-[10px] bg-indigo-500/20 text-indigo-300 font-black px-3 py-1 rounded-full uppercase tracking-widest">
-                      Étape 2 sur 3
+                      Étape 2 sur 5
                     </span>
                     <h3 className="font-display font-black text-xl text-slate-100 mt-2">
                       Recomposez la phrase correcte
@@ -3287,7 +4244,7 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                 <div className="space-y-6">
                   <div className="text-center">
                     <span className="text-[10px] bg-indigo-500/20 text-indigo-300 font-black px-3 py-1 rounded-full uppercase tracking-widest">
-                      Étape 3 sur 3
+                      Étape 3 sur 5
                     </span>
                     <h3 className="font-display font-black text-xl text-slate-100 mt-2">
                       Compréhension d'Affaires
@@ -3364,6 +4321,183 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                       <button
                         onClick={() => {
                           setExerciseIndex(3);
+                          triggerMascotReaction(
+                            'excited',
+                            "Étape 4 ! Traduis la phrase en écrivant sa traduction exacte !",
+                            "المرحلة الرابعة! ترجم العبارة بكتابتها بدقة!"
+                          );
+                        }}
+                        className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black text-xs px-6 py-3 rounded-xl transition shadow flex items-center gap-2 cursor-pointer"
+                      >
+                        <span>Étape Suivante</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* STAGE 4: WRITTEN TRANSLATION TYPING */}
+              {exerciseIndex === 3 && writtenTargetPhrase && (
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <span className="text-[10px] bg-indigo-500/20 text-indigo-300 font-black px-3 py-1 rounded-full uppercase tracking-widest">
+                      Étape 4 sur 5
+                    </span>
+                    <h3 className="font-display font-black text-xl text-slate-100 mt-2">
+                      Traduction Écrite
+                    </h3>
+                    <p className="text-xs text-slate-400">Traduisez cette phrase en écrivant sa traduction exacte :</p>
+                  </div>
+
+                  {/* Prompt Card */}
+                  <div className="p-6 bg-[#131930] border border-indigo-950 rounded-2xl text-center space-y-2 relative">
+                    <p className="text-xs font-bold uppercase tracking-wider text-indigo-400">Phrase à traduire :</p>
+                    <p className="font-display font-black text-lg text-slate-100">
+                      "{writtenTargetPhrase.translation}"
+                    </p>
+                    {language === 'ar' && (
+                      <p className="text-sm font-medium text-slate-300">"{writtenTargetPhrase.translationAr || writtenTargetPhrase.translation}"</p>
+                    )}
+                  </div>
+
+                  {/* Input field */}
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Votre traduction en {TARGET_LANGUAGES.find(t => t.code === targetLang)?.name} :</label>
+                    <input
+                      type="text"
+                      value={writtenUserAnswer}
+                      onChange={(e) => setWrittenUserAnswer(e.target.value)}
+                      disabled={writtenSubmitted}
+                      placeholder={`Écrivez votre réponse ici en ${TARGET_LANGUAGES.find(t => t.code === targetLang)?.name}...`}
+                      className="w-full text-sm px-4 py-3 bg-slate-950 border border-indigo-950 rounded-2xl focus:border-indigo-500 outline-none text-slate-100 placeholder-slate-600 font-medium"
+                    />
+                  </div>
+
+                  {/* Feedback panel */}
+                  {writtenSubmitted && (
+                    <div className={`p-4 rounded-xl border leading-relaxed text-xs space-y-1 ${
+                      writtenIsCorrect 
+                        ? 'bg-emerald-500/10 border-emerald-500/20 text-slate-300' 
+                        : 'bg-rose-500/10 border-rose-500/20 text-slate-300'
+                    }`}>
+                      <p className="font-bold text-slate-200">
+                        {writtenIsCorrect ? '✨ Fantastique ! Traduction parfaite !' : '❌ Pas tout à fait correct !'}
+                      </p>
+                      <p><b>Réponse attendue :</b> "{writtenTargetPhrase.phrase}"</p>
+                    </div>
+                  )}
+
+                  {/* Action buttons */}
+                  <div className="flex justify-end pt-2">
+                    {!writtenSubmitted ? (
+                      <button
+                        onClick={submitWrittenAnswer}
+                        disabled={!writtenUserAnswer.trim()}
+                        className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-black text-xs px-6 py-3 rounded-xl transition shadow active:scale-95 cursor-pointer"
+                      >
+                        Vérifier ma traduction
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setExerciseIndex(4);
+                          triggerMascotReaction(
+                            'excited',
+                            "Super ! Pour finir, réponds à cette question Vrai ou Faux !",
+                            "ممتاز! لإنهاء التمرين، أجب على سؤال صح أم خطأ هذا!"
+                          );
+                        }}
+                        className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black text-xs px-6 py-3 rounded-xl transition shadow flex items-center gap-2 cursor-pointer"
+                      >
+                        <span>Étape Suivante</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* STAGE 5: TRUE OR FALSE QUESTION */}
+              {exerciseIndex === 4 && (
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <span className="text-[10px] bg-indigo-500/20 text-indigo-300 font-black px-3 py-1 rounded-full uppercase tracking-widest">
+                      Étape 5 sur 5
+                    </span>
+                    <h3 className="font-display font-black text-xl text-slate-100 mt-2">
+                      Vrai ou Faux ?
+                    </h3>
+                    <p className="text-xs text-slate-400">Évaluez l'affirmation contextuelle suivante :</p>
+                  </div>
+
+                  {/* Question Container */}
+                  <div className="p-6 bg-slate-900/60 rounded-2xl border border-indigo-950/50 space-y-4 text-center">
+                    <span className="text-3xl block">💡</span>
+                    <p className="font-sans font-extrabold text-sm text-slate-200">
+                      "{trueFalseQuestion}"
+                    </p>
+                  </div>
+
+                  {/* Choices True / False */}
+                  <div className="grid grid-cols-2 gap-4">
+                    {[
+                      { label: '🟢 VRAI', val: true },
+                      { label: '🔴 FAUX', val: false }
+                    ].map((btn) => {
+                      const isSelected = trueFalseUserChoice === btn.val;
+                      const isCorrectChoice = btn.val === trueFalseCorrect;
+
+                      let btnStyle = "bg-[#151B33] border-indigo-950/60 hover:bg-[#1B2347]";
+                      if (trueFalseSubmitted) {
+                        if (isCorrectChoice) {
+                          btnStyle = "bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold cursor-not-allowed";
+                        } else if (isSelected) {
+                          btnStyle = "bg-rose-500/20 border-rose-500 text-rose-300 cursor-not-allowed";
+                        } else {
+                          btnStyle = "bg-slate-950/40 border-slate-950/60 opacity-60 cursor-not-allowed";
+                        }
+                      } else if (isSelected) {
+                        btnStyle = "bg-indigo-600 border-indigo-500 text-white font-bold ring-2 ring-indigo-400";
+                      }
+
+                      return (
+                        <button
+                          key={btn.label}
+                          onClick={() => setTrueFalseUserChoice(btn.val)}
+                          disabled={trueFalseSubmitted}
+                          className={`p-5 rounded-2xl border text-center transition-all duration-300 active:scale-95 text-xs font-black ${btnStyle}`}
+                        >
+                          {btn.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Feedback Panel */}
+                  {trueFalseSubmitted && (
+                    <div className="p-4 rounded-xl border border-indigo-950 bg-[#131930] text-xs leading-relaxed text-slate-300 space-y-1">
+                      <p className="font-bold text-slate-100">
+                        {trueFalseUserChoice === trueFalseCorrect ? "🎉 Excellente déduction !" : "❌ Oups, ce n'est pas tout à fait ça !"}
+                      </p>
+                      <p><b>Explication :</b> {trueFalseExplanation}</p>
+                    </div>
+                  )}
+
+                  {/* Action button */}
+                  <div className="flex justify-end pt-2">
+                    {!trueFalseSubmitted ? (
+                      <button
+                        onClick={submitTrueFalseAnswer}
+                        disabled={trueFalseUserChoice === null}
+                        className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-black text-xs px-6 py-3 rounded-xl transition shadow active:scale-95 cursor-pointer"
+                      >
+                        Valider mon choix
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setExerciseIndex(5);
                           triggerConfettiAnimation();
                         }}
                         className="bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-xs px-6 py-3 rounded-xl transition shadow flex items-center gap-2 cursor-pointer"
@@ -3376,8 +4510,8 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                 </div>
               )}
 
-              {/* STAGE 4: SESSION CONGRATULATIONS */}
-              {exerciseIndex === 3 && (
+              {/* STAGE 6: SESSION CONGRATULATIONS */}
+              {exerciseIndex === 5 && (
                 <div className="text-center py-8 space-y-6">
                   <div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-tr from-amber-400 to-orange-500 text-white text-5xl animate-bounce shadow-xl">
                     👑
@@ -3385,7 +4519,7 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                   
                   <div className="space-y-2">
                     <h3 className="font-display font-black text-2xl text-slate-100">Session Complétée de Main de Maître !</h3>
-                    <p className="text-sm text-slate-400">Vos aptitudes en commerce international augmentent drastiquement !</p>
+                    <p className="text-sm text-slate-400 font-bold text-amber-300">Votre parcours en "{CATEGORY_DETAILS[selectedCategory]?.name}" s'élève de jour en jour !</p>
                   </div>
 
                   {/* Rewards display */}
@@ -3478,6 +4612,15 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                 >
                   <Trophy className="w-4 h-4 text-amber-400" />
                   <span>🏆 Leaderboard</span>
+                </button>
+                <button
+                  onClick={() => { setCurrentTab('voice_call'); playSound('click'); }}
+                  className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black whitespace-nowrap transition ${
+                    currentTab === 'voice_call' ? 'bg-indigo-600 text-white shadow' : 'text-emerald-400 hover:text-emerald-200'
+                  }`}
+                >
+                  <Phone className="w-4 h-4 text-emerald-400 animate-pulse" />
+                  <span className="text-emerald-400 font-bold">📞 Appel Vocal IA</span>
                 </button>
               </div>
 
@@ -3673,13 +4816,23 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                                 {language === 'ar' ? badge.descriptionAr : badge.description}
                               </p>
                               
-                              <button
-                                onClick={() => startDuolingoSession(badge.level)}
-                                className="w-full md:w-auto mt-2 flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-[11px] px-3.5 py-1.5 rounded-lg transition"
-                              >
-                                <span>Lancer la leçon</span>
-                                <ChevronRight className="w-3.5 h-3.5" />
-                              </button>
+                              <div className="flex flex-col sm:flex-row gap-2 pt-1.5">
+                                <button
+                                  onClick={() => startDuolingoSession(badge.level)}
+                                  className="flex-grow flex items-center justify-center gap-1 bg-[#1A223F] hover:bg-[#252F5A] border border-indigo-500/20 text-slate-100 font-extrabold text-[10px] px-3 py-2 rounded-lg transition"
+                                >
+                                  <span>Standard</span>
+                                  <ChevronRight className="w-3 h-3" />
+                                </button>
+                                <button
+                                  onClick={startDynamicAISession}
+                                  disabled={isAILoading}
+                                  className="flex-grow flex items-center justify-center gap-1 bg-gradient-to-r from-pink-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white font-extrabold text-[10px] px-3 py-2 rounded-lg transition shadow-md disabled:opacity-50 active:scale-95"
+                                >
+                                  <Sparkles className="w-3 h-3 animate-pulse" />
+                                  <span>{isAILoading ? "Génération..." : "Mode IA (Gemini)"}</span>
+                                </button>
+                              </div>
                             </div>
 
                           </div>
@@ -4150,6 +5303,203 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                           <p className="text-[10px] font-bold text-slate-200 italic font-display">DZ-Lingo Corp</p>
                         </div>
                       </div>
+                    </div>
+                  )}
+
+                </div>
+              )}
+
+              {/* TAB: AI VOICE CALL (Appel Vocal IA) */}
+              {currentTab === 'voice_call' && (
+                <div className="bg-[#0F1326]/80 border border-indigo-950 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6 animate-fade-in text-slate-100">
+                  <div className="flex flex-col md:flex-row items-center justify-between gap-4 border-b border-indigo-950 pb-4">
+                    <div>
+                      <h2 className="font-display font-black text-xl text-slate-100 flex items-center gap-2">
+                        📞 Appel Vocal Direct avec Coach IA
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Discutez de vive voix avec Anis, votre coach d'affaires Gemini. Il vous guidera, posera des questions orales, et corrigera votre grammaire en direct !
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2.5 py-1 rounded">
+                        Wilaya Server Direct Link
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* ACTIVE CALL SCREEN */}
+                  {isCallActive ? (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      
+                      {/* VIRTUAL SMARTPHONE / CALL PANEL */}
+                      <div className="lg:col-span-1 bg-slate-950 border-2 border-indigo-950/80 rounded-3xl p-6 flex flex-col justify-between min-h-[420px] relative overflow-hidden shadow-2xl">
+                        
+                        {/* Glowing Background Glows */}
+                        <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-indigo-500/10 to-transparent blur-3xl rounded-full"></div>
+
+                        {/* Top info */}
+                        <div className="text-center space-y-1 relative z-10">
+                          <span className="text-[10px] uppercase font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full animate-pulse inline-block">
+                            {callStatus === 'connecting' ? 'Connexion...' : callStatus === 'listening' ? 'À vous de parler...' : callStatus === 'coach_speaking' ? 'Anis parle...' : 'Appel actif'}
+                          </span>
+                          <h4 className="font-display font-black text-slate-100 text-lg">Coach Anis (Gemini)</h4>
+                          <p className="text-xs text-slate-400">Pratique : {selectedCategory.toUpperCase()}</p>
+                          <p className="font-mono text-sm text-indigo-400 font-bold pt-1">
+                            {Math.floor(callTimer / 60).toString().padStart(2, '0')}:{ (callTimer % 60).toString().padStart(2, '0') }
+                          </p>
+                        </div>
+
+                        {/* Visual Avatar Waveform */}
+                        <div className="flex flex-col items-center justify-center py-6 relative z-10">
+                          <div className={`h-24 w-24 rounded-full bg-indigo-600/20 border-2 border-indigo-500/40 flex items-center justify-center relative shadow-xl transition-all duration-300 ${callStatus === 'coach_speaking' ? 'scale-110 border-emerald-400/80 ring-8 ring-emerald-500/10' : callStatus === 'listening' ? 'scale-110 border-amber-400/80 ring-8 ring-amber-500/10' : ''}`}>
+                            <span className="text-4xl">🤖</span>
+                            
+                            {/* Animated Waves */}
+                            {(callStatus === 'coach_speaking' || callStatus === 'listening') && (
+                              <div className="absolute inset-0 rounded-full border border-indigo-500/40 animate-ping opacity-50"></div>
+                            )}
+                          </div>
+
+                          {/* Pulsing soundwave bars */}
+                          <div className="flex items-center gap-1 h-8 mt-6">
+                            {[1, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 1].map((val, idx) => {
+                              let animStyle = {};
+                              if (callStatus === 'coach_speaking') {
+                                animStyle = { animation: `bounce 1s ease-in-out infinite alternate`, animationDelay: `${idx * 0.1}s` };
+                              } else if (callStatus === 'listening') {
+                                animStyle = { animation: `bounce 0.6s ease-in-out infinite alternate`, animationDelay: `${idx * 0.05}s` };
+                              }
+                              return (
+                                <div 
+                                  key={idx} 
+                                  style={animStyle}
+                                  className={`w-1 rounded-full bg-indigo-500/40 transition-all ${callStatus === 'coach_speaking' ? 'bg-emerald-400 h-6' : callStatus === 'listening' ? 'bg-amber-400 h-8' : 'h-1.5'}`}
+                                ></div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Bottom Actions (Mute, Hangup, PushToTalk) */}
+                        <div className="space-y-4 relative z-10">
+                          
+                          {/* Instructions banner */}
+                          <div className="bg-[#141830] border border-indigo-950/60 p-3 rounded-2xl text-center">
+                            <p className="text-[10px] uppercase font-bold text-slate-400">Objectif du Coach :</p>
+                            <p className="text-xs font-black text-indigo-300 mt-1">{currentTaskText || "Écoutez l'introduction..."}</p>
+                          </div>
+
+                          <div className="flex items-center justify-center gap-6">
+                            {/* Mute button */}
+                            <button
+                              onClick={() => {
+                                setIsMicMuted(!isMicMuted);
+                                playSound('click');
+                              }}
+                              className={`h-12 w-12 rounded-full border flex items-center justify-center transition active:scale-95 cursor-pointer ${isMicMuted ? 'bg-rose-500/20 border-rose-500 text-rose-400' : 'bg-slate-900 border-indigo-950 text-slate-300 hover:bg-slate-800'}`}
+                            >
+                              {isMicMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                            </button>
+
+                            {/* PUSH TO TALK BUTTON */}
+                            <button
+                              onClick={toggleListening}
+                              disabled={isMicMuted || callStatus === 'connecting'}
+                              className={`h-16 w-16 rounded-full flex flex-col items-center justify-center shadow-2xl transition active:scale-95 disabled:opacity-50 cursor-pointer ${isListening ? 'bg-amber-500 animate-pulse text-slate-950' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}
+                            >
+                              <Mic className="w-6 h-6" />
+                              <span className="text-[8px] font-black uppercase tracking-tight mt-0.5">{isListening ? "Parler..." : "Parler"}</span>
+                            </button>
+
+                            {/* Raccrocher */}
+                            <button
+                              onClick={endAICall}
+                              className="h-12 w-12 bg-rose-600 hover:bg-rose-500 text-white rounded-full flex items-center justify-center shadow-lg active:scale-95 transition cursor-pointer"
+                            >
+                              <Phone className="w-5 h-5 rotate-135" />
+                            </button>
+                          </div>
+                        </div>
+
+                      </div>
+
+                      {/* CALL SUMMARY & LIVE TRANSLATION / CORRECTIONS FEEDBACK */}
+                      <div className="lg:col-span-2 space-y-4">
+                        
+                        {/* Objective / Task */}
+                        <div className="bg-[#141830] border border-indigo-950/80 p-5 rounded-2xl space-y-2">
+                          <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest block">🎯 Mission de Parole Actuelle</span>
+                          <p className="text-sm font-black text-slate-100">
+                            {currentTaskText || "Écoutez les consignes d'Anis pour démarrer la pratique de parole."}
+                          </p>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                            Activez le microphone, parlez en prononçant ou traduisant la phrase demandée. Anis analysera automatiquement votre transcription vocale pour détecter des corrections !
+                          </p>
+                        </div>
+
+                        {/* LIVE COACH FEEDBACK SHEET */}
+                        {voiceCorrections ? (
+                          <div className="bg-emerald-500/10 border-2 border-emerald-500/30 p-5 rounded-3xl space-y-3 animate-fade-in">
+                            <span className="text-xs font-black text-emerald-400 uppercase tracking-widest block">💡 Correction instantanée d'Anis :</span>
+                            <div className="text-xs text-slate-200 leading-relaxed space-y-2">
+                              {voiceCorrections.split('\n').map((line, lIdx) => (
+                                <p key={lIdx}>{line}</p>
+                              ))}
+                            </div>
+                            <span className="text-[10px] text-slate-400 italic font-mono block pt-1 border-t border-emerald-500/20">
+                              +15 XP Bonus accordé pour l'exercice vocal !
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="bg-[#0A0D1A]/60 border border-dashed border-indigo-950 p-6 rounded-3xl text-center space-y-2 py-10">
+                            <span className="text-2xl block">💬</span>
+                            <p className="text-xs text-slate-400 italic">En attente de votre parole vocale...</p>
+                            <p className="text-[10px] text-indigo-400/60 max-w-xs mx-auto">Parlez dans le combiné pour voir apparaître ici l'analyse détaillée de vos expressions.</p>
+                          </div>
+                        )}
+
+                        {/* CHAT LOG SCREEN */}
+                        <div className="bg-[#141830] border border-indigo-950/80 rounded-2xl p-4 space-y-2">
+                          <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block">Transcription Textuelle de l'Appel</span>
+                          <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+                            {callHistory.map((item, index) => (
+                              <div key={index} className={`p-2.5 rounded-xl text-xs max-w-[85%] ${item.role === 'coach' ? 'bg-[#1A223F] text-slate-200 border border-indigo-950/30 mr-auto' : 'bg-indigo-600 text-white ml-auto'}`}>
+                                <p className="font-bold text-[9px] text-slate-400 uppercase tracking-widest mb-0.5">{item.role === 'coach' ? 'Coach Anis' : 'Moi (Vocal)'}</p>
+                                <p>{item.text}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                      </div>
+
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 max-w-md mx-auto space-y-6">
+                      <div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-500 to-indigo-600 text-white text-3xl shadow-2xl animate-pulse">
+                        📞
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <h3 className="font-display font-black text-xl text-slate-100">Discutez en direct avec votre tuteur IA d'élite</h3>
+                        <p className="text-xs text-slate-400">
+                          Pratiquez l'anglais, l'espagnol ou l'allemand par commande vocale. Apprenez à formuler, commander, et répondre sous forme de vrai coup de téléphone !
+                        </p>
+                      </div>
+
+                      {/* Category Selection Indicator */}
+                      <div className="bg-[#141830] border border-indigo-950 p-4 rounded-2xl flex items-center justify-between text-xs">
+                        <span className="text-slate-400">Catégorie active :</span>
+                        <span className="font-bold text-indigo-400 uppercase tracking-wider">{selectedCategory}</span>
+                      </div>
+
+                      <button
+                        onClick={startAICall}
+                        className="w-full bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-black text-xs py-4 rounded-xl shadow-lg hover:shadow-emerald-500/20 hover:scale-105 active:scale-95 transition duration-300 cursor-pointer"
+                      >
+                        Lancer l'Appel Vocal avec Anis
+                      </button>
                     </div>
                   )}
 
