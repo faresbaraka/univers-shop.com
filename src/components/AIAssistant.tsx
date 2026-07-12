@@ -250,9 +250,9 @@ export default function AIAssistant({ products, onAddToCart, onShowToast, onComp
             {isLoading && (
               <div className="flex justify-start">
                 <div className="bg-white rounded-2xl rounded-tl-none p-4 border border-slate-100 shadow-xs flex items-center gap-2">
-                  <span className="w-2 h-2 bg-amber-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                  <span className="w-2 h-2 bg-amber-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                  <span className="w-2 h-2 bg-amber-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                  <span className="w-2 h-2 bg-amber-600 rounded-full" style={{ animation: 'bounce 1s infinite 0ms' }}></span>
+                  <span className="w-2 h-2 bg-amber-600 rounded-full" style={{ animation: 'bounce 1s infinite 150ms' }}></span>
+                  <span className="w-2 h-2 bg-amber-600 rounded-full" style={{ animation: 'bounce 1s infinite 300ms' }}></span>
                 </div>
               </div>
             )}

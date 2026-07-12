@@ -9,6 +9,12 @@ export interface Product {
   stock: number;
   salesCount: number;
   createdAt: string;
+  isSecondHand?: boolean;
+  sellerName?: string;
+  sellerPhone?: string;
+  condition?: 'new_with_tag' | 'excellent' | 'very_good' | 'good' | 'fair';
+  size?: string;
+  brand?: string;
 }
 
 export interface CartItem {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   BookOpen, 
   Award, 
@@ -44,7 +44,8 @@ import {
   Info,
   Phone,
   Mic,
-  MicOff
+  MicOff,
+  Send
 } from 'lucide-react';
 import { Language } from '../lib/translations';
 import confetti from 'canvas-confetti';
@@ -2515,6 +2516,8 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
   const [isListening, setIsListening] = useState<boolean>(false);
   const [transcribedText, setTranscribedText] = useState<string>('');
   const [callTimer, setCallTimer] = useState<number>(0);
+  const [typedVoiceInput, setTypedVoiceInput] = useState<string>('');
+  const speechRecRef = useRef<any>(null);
 
   // Stage 4: Written Translation Typing State
   const [writtenTargetPhrase, setWrittenTargetPhrase] = useState<Phrase | null>(null);
@@ -2894,6 +2897,15 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
     setTranscribedText('');
     setCallTimer(0);
 
+    // Unlock speechSynthesis for iOS/Android
+    if ('speechSynthesis' in window) {
+      try {
+        const u = new SpeechSynthesisUtterance('');
+        u.volume = 0;
+        window.speechSynthesis.speak(u);
+      } catch (_) {}
+    }
+
     // Play simulated ringing tone
     let ringCount = 0;
     const playRing = () => {
@@ -2992,9 +3004,22 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
     }
 
     if (isListening) {
-      // Stop listening manually or let it end
       setIsListening(false);
+      if (speechRecRef.current) {
+        try {
+          speechRecRef.current.stop();
+        } catch (_) {}
+      }
       return;
+    }
+
+    // Unlock speechSynthesis for iOS/Android
+    if ('speechSynthesis' in window) {
+      try {
+        const u = new SpeechSynthesisUtterance('');
+        u.volume = 0;
+        window.speechSynthesis.speak(u);
+      } catch (_) {}
     }
 
     playSound('pop');
@@ -3002,6 +3027,7 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
     setCallStatus('listening');
 
     const rec = new SpeechRec();
+    speechRecRef.current = rec;
     rec.continuous = false;
     rec.interimResults = false;
     rec.lang = TARGET_LANGUAGES.find(t => t.code === targetLang)?.voiceLang || 'en-US';
@@ -5398,9 +5424,9 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                             {[1, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 1].map((val, idx) => {
                               let animStyle = {};
                               if (callStatus === 'coach_speaking') {
-                                animStyle = { animation: `bounce 1s ease-in-out infinite alternate`, animationDelay: `${idx * 0.1}s` };
+                                animStyle = { animation: `bounce 1s ease-in-out ${idx * 0.1}s infinite alternate` };
                               } else if (callStatus === 'listening') {
-                                animStyle = { animation: `bounce 0.6s ease-in-out infinite alternate`, animationDelay: `${idx * 0.05}s` };
+                                animStyle = { animation: `bounce 0.6s ease-in-out ${idx * 0.05}s infinite alternate` };
                               }
                               return (
                                 <div 
@@ -5451,6 +5477,40 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                             >
                               <Phone className="w-5 h-5 rotate-135" />
                             </button>
+                          </div>
+
+                          {/* OPTIONAL MANUAL TYPING FALLBACK FOR iOS & Android */}
+                          <div className="pt-2 border-t border-indigo-950/40">
+                            <p className="text-[10px] text-slate-400 font-bold mb-1 text-center uppercase tracking-wide">
+                              ⌨️ Pas de micro ? Écrivez votre réponse :
+                            </p>
+                            <div className="flex items-center gap-2 bg-[#0A0D1A]/80 border border-indigo-950/80 p-1 rounded-xl">
+                              <input 
+                                type="text"
+                                value={typedVoiceInput}
+                                onChange={(e) => setTypedVoiceInput(e.target.value)}
+                                placeholder="Tapez ou collez votre réponse..."
+                                className="bg-transparent text-xs text-slate-200 placeholder-slate-500 focus:outline-none flex-1 px-2.5 py-1.5"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && typedVoiceInput.trim()) {
+                                    submitVocalAnswer(typedVoiceInput.trim());
+                                    setTypedVoiceInput('');
+                                  }
+                                }}
+                              />
+                              <button
+                                onClick={() => {
+                                  if (typedVoiceInput.trim()) {
+                                    submitVocalAnswer(typedVoiceInput.trim());
+                                    setTypedVoiceInput('');
+                                  }
+                                }}
+                                disabled={!typedVoiceInput.trim() || callStatus === 'connecting'}
+                                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white p-1.5 rounded-lg active:scale-95 transition cursor-pointer"
+                              >
+                                <Send className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         </div>
 

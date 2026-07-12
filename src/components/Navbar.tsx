@@ -17,6 +17,8 @@ interface NavbarProps {
   language?: Language;
   onLanguageChange?: (lang: Language) => void;
   onOpenLanguageHub?: () => void;
+  appMode?: 'shop' | 'lingo' | 'vinted';
+  onChangeAppMode?: (mode: 'shop' | 'lingo' | 'vinted') => void;
 }
 
 export default function Navbar({ 
@@ -32,7 +34,9 @@ export default function Navbar({
   onOpenQuestLog,
   language = 'fr',
   onLanguageChange,
-  onOpenLanguageHub
+  onOpenLanguageHub,
+  appMode = 'shop',
+  onChangeAppMode
 }: NavbarProps) {
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [pinCode, setPinCode] = useState('');
@@ -131,6 +135,30 @@ export default function Navbar({
               </button>
             )}
 
+            {/* Vinted Corner Marketplace toggle */}
+            {!isAdmin && onChangeAppMode && (
+              <button
+                onClick={() => {
+                  const targetMode = appMode === 'vinted' ? 'shop' : 'vinted';
+                  onChangeAppMode(targetMode);
+                }}
+                className={`flex items-center gap-1.5 border text-[11px] font-black px-3.5 py-2 rounded-xl transition-all duration-300 transform active:scale-95 cursor-pointer relative overflow-hidden ${
+                  appMode === 'vinted'
+                    ? 'bg-gradient-to-r from-teal-500 to-emerald-500 border-teal-400 text-white shadow-md shadow-teal-500/20'
+                    : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700'
+                }`}
+                id="vinted-corner-trigger"
+              >
+                <span className="flex h-1.5 w-1.5 rounded-full bg-rose-500 animate-ping absolute top-1 right-1"></span>
+                <span>
+                  {appMode === 'vinted' 
+                    ? (language === 'ar' ? '🏪 المتجر الرسمي' : language === 'en' ? '🏪 Official Boutique' : '🏪 Boutique Officielle')
+                    : (language === 'ar' ? '👗 سوق المستعمل (Vinted)' : language === 'en' ? '👗 Thrift Corner (Vinted)' : '👗 Vide-Dressing (Vinted)')
+                  }
+                </span>
+              </button>
+            )}
+
             {/* LingoUnivers Collaboration portal link */}
             {!isAdmin && onOpenLanguageHub && (
               <button
@@ -225,6 +253,27 @@ export default function Navbar({
               className="w-full flex items-center justify-center gap-1.5 bg-[#0052FF]/10 text-[#0052FF] text-xs font-bold py-3 px-4 rounded-xl hover:bg-[#0052FF]/15 transition-all cursor-pointer"
             >
               <span>📦 {language === 'ar' ? 'تتبع طلبي والإرجاع' : 'Suivre mon colis & Retours'}</span>
+            </button>
+          )}
+
+          {!isAdmin && onChangeAppMode && (
+            <button
+              onClick={() => {
+                const targetMode = appMode === 'vinted' ? 'shop' : 'vinted';
+                onChangeAppMode(targetMode);
+                setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center justify-center gap-1.5 text-xs font-extrabold py-3 px-4 rounded-xl transition-all cursor-pointer border ${
+                appMode === 'vinted'
+                  ? 'bg-gradient-to-r from-teal-500 to-emerald-500 border-teal-400 text-white shadow-md'
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+              }`}
+            >
+              <span>
+                {appMode === 'vinted'
+                  ? (language === 'ar' ? '🏪 المتجر الرسمي' : language === 'en' ? '🏪 Official Boutique' : '🏪 Boutique Officielle')
+                  : (language === 'ar' ? '👗 سوق المستعمل والملابس (Vinted)' : language === 'en' ? '👗 Thrift Corner (Vinted)' : '👗 Vide-Dressing (Vinted)')}
+              </span>
             </button>
           )}
 

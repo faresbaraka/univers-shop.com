@@ -32,6 +32,7 @@ import DiscountWheel from './components/DiscountWheel';
 import QuestSystem from './components/QuestSystem';
 import CustomerReviews from './components/CustomerReviews';
 import LanguageLearningPortal from './components/LanguageLearningPortal';
+import VintedCorner from './components/VintedCorner';
 import { BackToTopButton } from './components/AIEnhancedSuite';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
@@ -219,9 +220,9 @@ export default function App() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isOrderPortalOpen, setIsOrderPortalOpen] = useState(false);
   const [isLanguageHubOpen, setIsLanguageHubOpen] = useState(false);
-  const [appMode, setAppMode] = useState<'shop' | 'lingo'>(() => {
+  const [appMode, setAppMode] = useState<'shop' | 'lingo' | 'vinted'>(() => {
     try {
-      return (localStorage.getItem('lingo_univers_app_mode') as 'shop' | 'lingo') || 'shop';
+      return (localStorage.getItem('lingo_univers_app_mode') as 'shop' | 'lingo' | 'vinted') || 'shop';
     } catch (_) {
       return 'shop';
     }
@@ -230,22 +231,14 @@ export default function App() {
   // AI Suite state
   const [aiState, setAiState] = useState<AISuiteState>(DEFAULT_AI_STATE);
 
-  // Automatic Dark Mode
+  // Dark Mode (only if explicitly enabled by the user and saved in localStorage, default to false)
   const [darkMode, setDarkMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem('univers_shop_dark_mode');
-    if (saved !== null) {
+    try {
+      const saved = localStorage.getItem('univers_shop_dark_mode');
       return saved === 'true';
+    } catch (_) {
+      return false;
     }
-    // Auto-detect night hours (after 18:00 or before 07:00)
-    const hour = new Date().getHours();
-    if (hour >= 18 || hour < 7) {
-      return true;
-    }
-    // Auto-detect browser/OS system dark mode
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return true;
-    }
-    return false;
   });
 
   useEffect(() => {
@@ -254,7 +247,9 @@ export default function App() {
     } else {
       document.documentElement.classList.remove('dark');
     }
-    localStorage.setItem('univers_shop_dark_mode', String(darkMode));
+    try {
+      localStorage.setItem('univers_shop_dark_mode', String(darkMode));
+    } catch (_) {}
   }, [darkMode]);
 
   // Language & Detailed View selection states
@@ -269,7 +264,11 @@ export default function App() {
 
   // Gamification: Mission Économies & profile details state
   const [userPoints, setUserPoints] = useState<number>(() => {
-    return Number(localStorage.getItem('univers_shop_points') || '0');
+    try {
+      return Number(localStorage.getItem('univers_shop_points') || '0');
+    } catch (_) {
+      return 0;
+    }
   });
   const [completedQuests, setCompletedQuests] = useState<string[]>(() => {
     try {
@@ -280,10 +279,18 @@ export default function App() {
     }
   });
   const [customerName, setCustomerName] = useState<string>(() => {
-    return localStorage.getItem('univers_shop_cust_name') || '';
+    try {
+      return localStorage.getItem('univers_shop_cust_name') || '';
+    } catch (_) {
+      return '';
+    }
   });
   const [customerPhone, setCustomerPhone] = useState<string>(() => {
-    return localStorage.getItem('univers_shop_cust_phone') || '';
+    try {
+      return localStorage.getItem('univers_shop_cust_phone') || '';
+    } catch (_) {
+      return '';
+    }
   });
   const [isQuestLogOpen, setIsQuestLogOpen] = useState(false);
 
@@ -615,7 +622,13 @@ export default function App() {
           category: data.category || 'Tous',
           stock: data.stock !== undefined ? Number(data.stock) : 10,
           salesCount: Number(data.salesCount) || 0,
-          createdAt: createdAtStr
+          createdAt: createdAtStr,
+          isSecondHand: !!data.isSecondHand,
+          sellerName: data.sellerName || '',
+          sellerPhone: data.sellerPhone || '',
+          condition: data.condition || undefined,
+          size: data.size || '',
+          brand: data.brand || ''
         } as Product);
       });
       
@@ -855,6 +868,19 @@ export default function App() {
     } catch (e) {
       console.warn('Failed to delete product from Firestore, using local fallback:', e);
       showToast('Mode Local : Article retiré localement.', 'info');
+    }
+  };
+
+  const handleDeleteSecondHandProduct = async (productId: string) => {
+    // Optimistic UI update: instantly remove product locally
+    setProducts(prev => prev.filter(p => p.id !== productId));
+
+    try {
+      await deleteDoc(doc(db, 'products', productId));
+      showToast('Votre annonce de vide-dressing a été retirée avec succès !', 'success');
+    } catch (e) {
+      console.warn('Failed to delete second-hand product from Firestore:', e);
+      showToast('Mode Local : Annonce retirée localement.', 'info');
     }
   };
 
@@ -1098,6 +1124,11 @@ export default function App() {
           setAppMode('lingo');
           localStorage.setItem('lingo_univers_app_mode', 'lingo');
         }}
+        appMode={appMode}
+        onChangeAppMode={(mode) => {
+          setAppMode(mode);
+          localStorage.setItem('lingo_univers_app_mode', mode);
+        }}
       />
 
       {/* Primary viewport switch */}
@@ -1126,6 +1157,20 @@ export default function App() {
             userPoints={userPoints}
             onAddPoints={handleAddPoints}
             onShowToast={showToast}
+            onClose={() => {
+              setAppMode('shop');
+              localStorage.setItem('lingo_univers_app_mode', 'shop');
+            }}
+          />
+        </main>
+      ) : appMode === 'vinted' ? (
+        <main className="flex-grow animate-fade-in">
+          <VintedCorner
+            products={products}
+            onAddProduct={handleAddProduct}
+            onDeleteProduct={handleDeleteSecondHandProduct}
+            onAddToCart={handleAddToCart}
+            language={language}
             onClose={() => {
               setAppMode('shop');
               localStorage.setItem('lingo_univers_app_mode', 'shop');
