@@ -34,61 +34,61 @@
   --shadow-vibrant-lg: 0 4px 20px rgba(0,0,0,0.05);
 }
 
-/* Custom modern aesthetic styles */
+/* Custom modern aesthetic styles - Luxury Tech Minimalism */
 body {
   font-family: var(--font-sans);
-  background-color: #F0F4F8;
-  color: #1E293B;
+  background-color: #07080C;
+  color: #E2E8F0;
   -webkit-font-smoothing: antialiased;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 @variant dark (&:where(.dark, .dark *));
 
-/* Comprehensive global Dark Mode style overrides */
+/* Comprehensive global Dark Mode style overrides for Luxury Tech Minimalism */
 .dark body {
-  background-color: #0b0f19;
-  color: #f1f5f9;
+  background-color: #07080C;
+  color: #F8FAFC;
 }
 
 .dark .bg-white {
-  background-color: #111827 !important;
+  background-color: #0E1017 !important;
 }
 
 .dark .text-slate-950,
 .dark .text-slate-900,
 .dark .text-gray-900 {
-  color: #f9fafb !important;
+  color: #F8FAFC !important;
 }
 
 .dark .text-slate-600,
 .dark .text-slate-500,
 .dark .text-slate-400 {
-  color: #9ca3af !important;
+  color: #94A3B8 !important;
 }
 
 .dark .border-slate-150,
 .dark .border-slate-200,
 .dark .border-slate-100,
 .dark .border-slate-300 {
-  border-color: #1f2937 !important;
+  border-color: #1E2230 !important;
 }
 
 .dark .bg-slate-50,
 .dark .bg-slate-100 {
-  background-color: #1f2937 !important;
+  background-color: #121520 !important;
 }
 
 .dark input, 
 .dark select, 
 .dark textarea {
-  background-color: #1f2937 !important;
-  color: #f9fafb !important;
-  border-color: #374151 !important;
+  background-color: #0E1017 !important;
+  color: #F8FAFC !important;
+  border-color: #1E2230 !important;
 }
 
 .dark .bg-slate-900 {
-  background-color: #030712 !important;
+  background-color: #090B10 !important;
 }
 
 .dark .shadow-sm {

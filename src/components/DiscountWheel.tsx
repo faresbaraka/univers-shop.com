@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { safeLocalStorage as localStorage } from '../lib/safeStorage';
 import { Gift, Sparkles, X, RotateCcw } from 'lucide-react';
 
 interface DiscountWheelProps {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { safeLocalStorage as localStorage } from '../lib/safeStorage';
 import { Trophy, CheckCircle, Circle, ArrowRight, Award, ShieldCheck, Sparkles, User, Gift, Phone } from 'lucide-react';
 
 interface QuestSystemProps {

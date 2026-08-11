@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { ShoppingCart, ShieldCheck, Phone, Key, UserCheck, Menu, X, Check, Trophy, Globe } from 'lucide-react';
-import { CartItem } from '../types';
+import { CartItem, AppMode } from '../types';
 import { Language, translate } from '../lib/translations';
+import FaressoLogo from './FaressoLogo';
 
 interface NavbarProps {
   cart: CartItem[];
@@ -17,8 +18,8 @@ interface NavbarProps {
   language?: Language;
   onLanguageChange?: (lang: Language) => void;
   onOpenLanguageHub?: () => void;
-  appMode?: 'shop' | 'lingo' | 'vinted';
-  onChangeAppMode?: (mode: 'shop' | 'lingo' | 'vinted') => void;
+  appMode?: AppMode;
+  onChangeAppMode?: (mode: AppMode) => void;
 }
 
 export default function Navbar({ 
@@ -64,25 +65,13 @@ export default function Navbar({
   const isRtl = language === 'ar';
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-xs" dir={isRtl ? 'rtl' : 'ltr'}>
+    <header className="sticky top-0 z-50 w-full bg-slate-950/95 backdrop-blur-md border-b border-slate-800 shadow-xl" dir={isRtl ? 'rtl' : 'ltr'}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo & Brand */}
-          <div className="flex items-center gap-3">
-            {logoUrl ? (
-              <img 
-                src={logoUrl} 
-                alt={storeName || "Univers Shop"} 
-                className="h-10 w-auto object-contain max-w-[160px] cursor-pointer"
-                onClick={() => window.location.reload()}
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <span className="font-display font-black text-2xl tracking-tighter text-[#0052FF] select-none uppercase">
-                {storeName || "Univers Shop"}
-              </span>
-            )}
-            <div className="hidden sm:flex items-center gap-1 text-[10px] uppercase font-bold text-[#059669] bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100/50">
+          {/* Logo & Brand FARESSØ */}
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.reload()}>
+            <FaressoLogo size="md" showTagline={false} />
+            <div className="hidden sm:flex items-center gap-1 text-[10px] uppercase font-bold text-sky-400 bg-sky-950/60 px-2.5 py-1 rounded-full border border-sky-800/50">
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>{language === 'ar' ? 'ضمان مشفر' : language === 'en' ? 'Secured Seal' : 'Garantie Sécurisée'}</span>
             </div>
@@ -102,24 +91,24 @@ export default function Navbar({
           <div className="flex items-center gap-2">
             
             {/* MANUAL LANGUAGE SELECTOR DROPDOWN */}
-            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-250 hover:bg-slate-100 rounded-xl px-2.5 py-1.5 transition-all text-xs font-bold text-slate-700">
-              <Globe className="w-3.5 h-3.5 text-[#0052FF]" />
+            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 rounded-xl px-2.5 py-1.5 transition-all text-xs font-bold text-slate-200">
+              <Globe className="w-3.5 h-3.5 text-sky-400" />
               <select 
                 value={language}
                 onChange={(e) => onLanguageChange?.(e.target.value as Language)}
-                className="bg-transparent focus:outline-none cursor-pointer pr-1"
+                className="bg-transparent focus:outline-none cursor-pointer pr-1 text-slate-200"
                 id="language-selector-dropdown"
               >
-                <option value="fr">🇫🇷 FR</option>
-                <option value="ar">🇩🇿 عربي</option>
-                <option value="en">🇬🇧 EN</option>
+                <option value="fr" className="bg-slate-900 text-slate-200">🇫🇷 FR</option>
+                <option value="ar" className="bg-slate-900 text-slate-200">🇩🇿 عربي</option>
+                <option value="en" className="bg-slate-900 text-slate-200">🇬🇧 EN</option>
               </select>
             </div>
 
             {/* Status indicators for security */}
-            <div className="security-badge-active hidden xl:flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-100 py-1.5 px-3 rounded-full">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              <span className="font-medium">
+            <div className="security-badge-active hidden xl:flex items-center gap-1.5 text-xs text-slate-300 bg-slate-900/80 border border-slate-800 py-1.5 px-3 rounded-full">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="font-medium text-slate-300">
                 {language === 'ar' ? 'شهادة SSL نشطة' : language === 'en' ? 'SSL Active (AES-256)' : 'Certificat SSL Sécurisé (AES-256)'}
               </span>
             </div>
@@ -128,32 +117,32 @@ export default function Navbar({
             {!isAdmin && (
               <button
                 onClick={onOpenOrderPortal}
-                className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 text-slate-700 hover:text-[#0052FF] hover:border-[#0052FF]/50 text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer"
+                className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 text-slate-200 hover:text-sky-400 hover:border-sky-500/50 text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer"
                 id="buyer-tracking-trigger"
               >
                 <span>📦 {language === 'ar' ? 'التتبع والإرجاع' : language === 'en' ? 'Tracking & Returns' : 'Suivi & Retours'}</span>
               </button>
             )}
 
-            {/* Vinted Corner Marketplace toggle */}
+            {/* FARESSØ Tech Lab & Accessories toggle */}
             {!isAdmin && onChangeAppMode && (
               <button
                 onClick={() => {
-                  const targetMode = appMode === 'vinted' ? 'shop' : 'vinted';
+                  const targetMode = appMode === 'vinted' || appMode === 'faresso' ? 'shop' : 'vinted';
                   onChangeAppMode(targetMode);
                 }}
                 className={`flex items-center gap-1.5 border text-[11px] font-black px-3.5 py-2 rounded-xl transition-all duration-300 transform active:scale-95 cursor-pointer relative overflow-hidden ${
-                  appMode === 'vinted'
-                    ? 'bg-gradient-to-r from-teal-500 to-emerald-500 border-teal-400 text-white shadow-md shadow-teal-500/20'
-                    : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700'
+                  appMode === 'vinted' || appMode === 'faresso'
+                    ? 'bg-gradient-to-r from-sky-500 to-blue-600 border-sky-400 text-white shadow-md shadow-sky-500/20'
+                    : 'bg-sky-950/40 hover:bg-sky-900/60 border-sky-800/60 text-sky-300'
                 }`}
-                id="vinted-corner-trigger"
+                id="faresso-tech-trigger"
               >
-                <span className="flex h-1.5 w-1.5 rounded-full bg-rose-500 animate-ping absolute top-1 right-1"></span>
+                <span className="flex h-1.5 w-1.5 rounded-full bg-amber-400 animate-ping absolute top-1 right-1"></span>
                 <span>
-                  {appMode === 'vinted' 
-                    ? (language === 'ar' ? '🏪 المتجر الرسمي' : language === 'en' ? '🏪 Official Boutique' : '🏪 Boutique Officielle')
-                    : (language === 'ar' ? '👗 سوق المستعمل (Vinted)' : language === 'en' ? '👗 Thrift Corner (Vinted)' : '👗 Vide-Dressing (Vinted)')
+                  {appMode === 'vinted' || appMode === 'faresso'
+                    ? (language === 'ar' ? '🏪 المتجر الرئيسي' : language === 'en' ? '🏪 Main Shop' : '🏪 Boutique Principale')
+                    : (language === 'ar' ? '⚡ مختبر فـاريسو للشواحن والإكسسوارات' : language === 'en' ? '⚡ FARESSØ Tech Lab' : '⚡ FARESSØ Tech Lab (Chargeurs & Accessoires)')
                   }
                 </span>
               </button>
@@ -163,11 +152,11 @@ export default function Navbar({
             {!isAdmin && onOpenLanguageHub && (
               <button
                 onClick={onOpenLanguageHub}
-                className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer relative"
+                className="flex items-center gap-1.5 bg-indigo-950/50 border border-indigo-800/60 text-indigo-300 hover:bg-indigo-900/60 text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer relative"
                 id="language-hub-trigger-btn"
                 title="Apprendre des langues & Gagner des cadeaux"
               >
-                <span className="absolute -top-1.5 -right-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-500 text-[8px] font-black text-white ring-1 ring-white">
+                <span className="absolute -top-1.5 -right-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-500 text-[8px] font-black text-white ring-1 ring-slate-900">
                   XP
                 </span>
                 <span>🎓 {language === 'ar' ? 'تعلم اللغات' : language === 'en' ? 'LingoUnivers' : 'Apprendre Langues'}</span>
@@ -178,11 +167,11 @@ export default function Navbar({
             {!isAdmin && onOpenQuestLog && (
               <button
                 onClick={onOpenQuestLog}
-                className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 hover:border-amber-300 text-amber-700 text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer hover:bg-amber-100/50"
+                className="flex items-center gap-1.5 bg-amber-950/50 border border-amber-800/60 hover:border-amber-700 text-amber-300 text-xs font-bold px-3 py-2 rounded-xl transition-all cursor-pointer hover:bg-amber-900/50"
                 id="quest-log-trigger"
                 title="Consulter vos missions économies et récompenses"
               >
-                <Trophy className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                <Trophy className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
                 <span>{userPoints} pts</span>
               </button>
             )}
@@ -259,20 +248,20 @@ export default function Navbar({
           {!isAdmin && onChangeAppMode && (
             <button
               onClick={() => {
-                const targetMode = appMode === 'vinted' ? 'shop' : 'vinted';
+                const targetMode = appMode === 'vinted' || appMode === 'faresso' ? 'shop' : 'vinted';
                 onChangeAppMode(targetMode);
                 setMobileMenuOpen(false);
               }}
               className={`w-full flex items-center justify-center gap-1.5 text-xs font-extrabold py-3 px-4 rounded-xl transition-all cursor-pointer border ${
-                appMode === 'vinted'
-                  ? 'bg-gradient-to-r from-teal-500 to-emerald-500 border-teal-400 text-white shadow-md'
-                  : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                appMode === 'vinted' || appMode === 'faresso'
+                  ? 'bg-gradient-to-r from-sky-500 to-blue-600 border-sky-400 text-white shadow-md'
+                  : 'bg-sky-950/60 border-sky-800/80 text-sky-300 hover:bg-sky-900/60'
               }`}
             >
               <span>
-                {appMode === 'vinted'
-                  ? (language === 'ar' ? '🏪 المتجر الرسمي' : language === 'en' ? '🏪 Official Boutique' : '🏪 Boutique Officielle')
-                  : (language === 'ar' ? '👗 سوق المستعمل والملابس (Vinted)' : language === 'en' ? '👗 Thrift Corner (Vinted)' : '👗 Vide-Dressing (Vinted)')}
+                {appMode === 'vinted' || appMode === 'faresso'
+                  ? (language === 'ar' ? '🏪 المتجر الرئيسي' : language === 'en' ? '🏪 Main Shop' : '🏪 Boutique Principale')
+                  : (language === 'ar' ? '⚡ مختبر فـاريسو للشواحن والإكسسوارات' : language === 'en' ? '⚡ FARESSØ Tech Lab' : '⚡ FARESSØ Tech Lab (Chargeurs & Accessoires)')}
               </span>
             </button>
           )}

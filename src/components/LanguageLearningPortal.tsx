@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { safeLocalStorage as localStorage } from '../lib/safeStorage';
 import { 
   BookOpen, 
   Award, 
@@ -2156,7 +2157,12 @@ const DYNAMIC_PHRASES_BY_MONTH: Record<LearningCategory, MonthSyllabus[]> = {
 };
 
 const getCurriculum = (lang: string, level: SkillLevel, category?: LearningCategory, month?: number): Lesson[] => {
-  const activeCategory = category || (localStorage.getItem('lingo_univers_user_category') as LearningCategory) || 'voyage';
+  let activeCategory: LearningCategory = 'voyage';
+  try {
+    activeCategory = category || (localStorage.getItem('lingo_univers_user_category') as LearningCategory) || 'voyage';
+  } catch (_) {
+    activeCategory = category || 'voyage';
+  }
   const catData = DYNAMIC_PHRASES_BY_MONTH[activeCategory] || DYNAMIC_PHRASES_BY_MONTH['voyage'];
   
   // Filter by level, and optionally filter by month if specified
@@ -2244,18 +2250,34 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
   onClose
 }) => {
   const [targetLang, setTargetLang] = useState<string>(() => {
-    return localStorage.getItem('lingo_univers_target_lang') || 'en';
+    try {
+      return localStorage.getItem('lingo_univers_target_lang') || 'en';
+    } catch (_) {
+      return 'en';
+    }
   });
   const [selectedLevel, setSelectedLevel] = useState<SkillLevel>(() => {
-    return (localStorage.getItem('lingo_univers_user_level') as SkillLevel) || 'debutant';
+    try {
+      return (localStorage.getItem('lingo_univers_user_level') as SkillLevel) || 'debutant';
+    } catch (_) {
+      return 'debutant';
+    }
   });
   const [selectedCategory, setSelectedCategory] = useState<LearningCategory>(() => {
-    return (localStorage.getItem('lingo_univers_user_category') as LearningCategory) || 'voyage';
+    try {
+      return (localStorage.getItem('lingo_univers_user_category') as LearningCategory) || 'voyage';
+    } catch (_) {
+      return 'voyage';
+    }
   });
 
   // Level Assessment & Motivation Wizard states
   const [isLevelTested, setIsLevelTested] = useState<boolean>(() => {
-    return localStorage.getItem('lingo_univers_level_tested') === 'true';
+    try {
+      return localStorage.getItem('lingo_univers_level_tested') === 'true';
+    } catch (_) {
+      return false;
+    }
   });
   const [assessmentStep, setAssessmentStep] = useState<number>(0); // 0: Motivation & Lang, 1-3: Quiz Q1-Q3, 4: Results & Assigned Level
   const [assessmentAnswers, setAssessmentAnswers] = useState<number[]>([]); // chosen options indices
@@ -2438,7 +2460,11 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
   }, [selectedCategory]);
 
   const [selectedMonth, setSelectedMonth] = useState<number>(() => {
-    return parseInt(localStorage.getItem('lingo_univers_user_month') || '1');
+    try {
+      return parseInt(localStorage.getItem('lingo_univers_user_month') || '1');
+    } catch (_) {
+      return 1;
+    }
   });
 
   useEffect(() => {
@@ -2483,7 +2509,11 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
   
   // Hearts (Vies) System - Duolingo Gamification Engine
   const [hearts, setHearts] = useState<number>(() => {
-    return parseInt(localStorage.getItem('lingo_univers_hearts') || '5');
+    try {
+      return parseInt(localStorage.getItem('lingo_univers_hearts') || '5');
+    } catch (_) {
+      return 5;
+    }
   });
 
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -2491,10 +2521,18 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
 
   // Daily Streak and global XP
   const [streak, setStreak] = useState<number>(() => {
-    return parseInt(localStorage.getItem('lingo_univers_streak') || '3');
+    try {
+      return parseInt(localStorage.getItem('lingo_univers_streak') || '3');
+    } catch (_) {
+      return 3;
+    }
   });
   const [userXp, setUserXp] = useState<number>(() => {
-    return parseInt(localStorage.getItem('lingo_univers_xp') || '120');
+    try {
+      return parseInt(localStorage.getItem('lingo_univers_xp') || '120');
+    } catch (_) {
+      return 120;
+    }
   });
 
   // ACTIVE EXERCISE FLOW STATES (Duolingo Simulation Mode)
@@ -2508,6 +2546,7 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
 
   // AI Voice Call State
   const [isCallActive, setIsCallActive] = useState<boolean>(false);
+  const [voiceCallMode, setVoiceCallMode] = useState<'exercises' | 'conversation'>('exercises');
   const [callStatus, setCallStatus] = useState<string>('idle'); // 'idle', 'dialing', 'connecting', 'active', 'coach_speaking', 'listening'
   const [isMicMuted, setIsMicMuted] = useState<boolean>(false);
   const [callHistory, setCallHistory] = useState<{role: 'coach' | 'user', text: string}[]>([]);
@@ -2951,7 +2990,7 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
         const response = await fetch('/api/lingo/voice-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetLang, category: selectedCategory, history: [] })
+          body: JSON.stringify({ targetLang, category: selectedCategory, history: [], callMode: voiceCallMode })
         });
 
         if (!response.ok) throw new Error("Call start error");
@@ -3084,7 +3123,8 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
           transcription: text,
           history: updatedHistory.slice(-5), // Send last few messages
           targetLang,
-          category: selectedCategory
+          category: selectedCategory,
+          callMode: voiceCallMode
         })
       });
 
@@ -5403,6 +5443,23 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                           </span>
                           <h4 className="font-display font-black text-slate-100 text-lg">Coach Lia (Gemini)</h4>
                           <p className="text-xs text-slate-400">Pratique : {selectedCategory.toUpperCase()}</p>
+                          <div className="inline-flex items-center gap-1.5 mt-1 px-2.5 py-1 rounded-full bg-indigo-950/60 border border-indigo-900/50">
+                            <span className="text-[9px] font-bold text-indigo-300">
+                              Mode: {voiceCallMode === 'exercises' ? '📚 Exercices' : '💬 Discussion'}
+                            </span>
+                            <button
+                              onClick={() => {
+                                const nextMode = voiceCallMode === 'exercises' ? 'conversation' : 'exercises';
+                                setVoiceCallMode(nextMode);
+                                playSound('click');
+                                onShowToast(nextMode === 'conversation' ? 'Mode de discussion libre activé ! (Lia va réagir à votre prochain message)' : 'Mode exercices de Lia activé !', 'info');
+                              }}
+                              className="text-[8px] bg-indigo-600 hover:bg-indigo-500 text-white px-1.5 py-0.5 rounded cursor-pointer transition font-extrabold uppercase"
+                              title="Changer de mode en cours d'appel"
+                            >
+                              Changer
+                            </button>
+                          </div>
                           <p className="font-mono text-sm text-indigo-400 font-bold pt-1">
                             {Math.floor(callTimer / 60).toString().padStart(2, '0')}:{ (callTimer % 60).toString().padStart(2, '0') }
                           </p>
@@ -5582,9 +5639,41 @@ export const LanguageLearningPortal: React.FC<LanguageLearningPortalProps> = ({
                         </p>
                       </div>
 
+                      {/* Choix du mode d'appel */}
+                      <div className="space-y-3 text-left">
+                        <label className="text-[11px] uppercase tracking-widest font-mono font-bold text-indigo-400 block">
+                          🎯 Mode d'interaction privilégié :
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            onClick={() => {
+                              setVoiceCallMode('exercises');
+                              playSound('click');
+                            }}
+                            className={`p-3.5 rounded-2xl text-left border transition-all duration-300 relative cursor-pointer ${voiceCallMode === 'exercises' ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-lg ring-1 ring-indigo-500/30' : 'bg-[#141830] border-indigo-950 text-slate-400 hover:bg-slate-900/60'}`}
+                          >
+                            <span className="absolute top-2 right-2 text-xs">📚</span>
+                            <h5 className="font-bold text-xs text-slate-100">Mode Exercices</h5>
+                            <p className="text-[10px] text-slate-400 mt-1 leading-snug">Prononciation, quiz vocabulaire, grammaire & rôles.</p>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setVoiceCallMode('conversation');
+                              playSound('click');
+                            }}
+                            className={`p-3.5 rounded-2xl text-left border transition-all duration-300 relative cursor-pointer ${voiceCallMode === 'conversation' ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-lg ring-1 ring-indigo-500/30' : 'bg-[#141830] border-indigo-950 text-slate-400 hover:bg-slate-900/60'}`}
+                          >
+                            <span className="absolute top-2 right-2 text-xs">💬</span>
+                            <h5 className="font-bold text-xs text-slate-100">Discussion Libre</h5>
+                            <p className="text-[10px] text-slate-400 mt-1 leading-snug">Chat h24 illimité, présentations, loisirs, questions libres.</p>
+                          </button>
+                        </div>
+                      </div>
+
                       {/* Category Selection Indicator */}
                       <div className="bg-[#141830] border border-indigo-950 p-4 rounded-2xl flex items-center justify-between text-xs">
-                        <span className="text-slate-400">Catégorie active :</span>
+                        <span className="text-slate-400">Thème linguistique actif :</span>
                         <span className="font-bold text-indigo-400 uppercase tracking-wider">{selectedCategory}</span>
                       </div>
 

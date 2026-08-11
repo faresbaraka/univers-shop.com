@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { safeLocalStorage as localStorage } from './lib/safeStorage';
 import { 
   ShieldCheck, 
   ShoppingBag, 
@@ -18,7 +19,7 @@ import {
   Moon,
   Sun
 } from 'lucide-react';
-import { Product, CartItem, Order, StoreSettings, AISuiteState, Review } from './types';
+import { Product, CartItem, Order, StoreSettings, AISuiteState, Review, AppMode } from './types';
 import { DEFAULT_AI_STATE, runAIOptimizationCycle } from './lib/aiSuite';
 import { INITIAL_PRODUCTS, ALGERIAN_WILAYAS } from './data/mockProducts';
 import Navbar from './components/Navbar';
@@ -27,12 +28,13 @@ import ProductDetailModal from './components/ProductDetailModal';
 import Checkout from './components/Checkout';
 import AdminPanel from './components/AdminPanel';
 import BuyerOrderPortal from './components/BuyerOrderPortal';
+import FaressoLogo from './components/FaressoLogo';
 import AIAssistant from './components/AIAssistant';
 import DiscountWheel from './components/DiscountWheel';
 import QuestSystem from './components/QuestSystem';
 import CustomerReviews from './components/CustomerReviews';
 import LanguageLearningPortal from './components/LanguageLearningPortal';
-import VintedCorner from './components/VintedCorner';
+import FaressoTechCorner from './components/FaressoTechCorner';
 import { BackToTopButton } from './components/AIEnhancedSuite';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
@@ -180,16 +182,23 @@ export default function App() {
   const [settings, setSettings] = useState<StoreSettings>(() => {
     try {
       const saved = localStorage.getItem('univers_shop_settings');
-      return saved ? JSON.parse(saved) : {
-        storeName: 'Univers Shop',
-        logoUrl: '/logo_univers_shop.jpg',
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          ...parsed,
+          storeName: 'Faressø.official',
+        };
+      }
+      return {
+        storeName: 'Faressø.official',
+        logoUrl: '',
         sellerPhone: '0558926754'
       };
     } catch (e) {
       console.warn("Could not parse settings from localstorage:", e);
       return {
-        storeName: 'Univers Shop',
-        logoUrl: '/logo_univers_shop.jpg',
+        storeName: 'Faressø.official',
+        logoUrl: '',
         sellerPhone: '0558926754'
       };
     }
@@ -220,9 +229,9 @@ export default function App() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isOrderPortalOpen, setIsOrderPortalOpen] = useState(false);
   const [isLanguageHubOpen, setIsLanguageHubOpen] = useState(false);
-  const [appMode, setAppMode] = useState<'shop' | 'lingo' | 'vinted'>(() => {
+  const [appMode, setAppMode] = useState<AppMode>(() => {
     try {
-      return (localStorage.getItem('lingo_univers_app_mode') as 'shop' | 'lingo' | 'vinted') || 'shop';
+      return (localStorage.getItem('lingo_univers_app_mode') as AppMode) || 'shop';
     } catch (_) {
       return 'shop';
     }
@@ -231,13 +240,13 @@ export default function App() {
   // AI Suite state
   const [aiState, setAiState] = useState<AISuiteState>(DEFAULT_AI_STATE);
 
-  // Dark Mode (only if explicitly enabled by the user and saved in localStorage, default to false)
+  // Dark Mode (Dark high-tech aesthetic by default)
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('univers_shop_dark_mode');
-      return saved === 'true';
+      return saved === 'false' ? false : true;
     } catch (_) {
-      return false;
+      return true;
     }
   });
 
@@ -1163,14 +1172,14 @@ export default function App() {
             }}
           />
         </main>
-      ) : appMode === 'vinted' ? (
+      ) : appMode === 'vinted' || appMode === 'faresso' ? (
         <main className="flex-grow animate-fade-in">
-          <VintedCorner
+          <FaressoTechCorner
             products={products}
-            onAddProduct={handleAddProduct}
-            onDeleteProduct={handleDeleteSecondHandProduct}
             onAddToCart={handleAddToCart}
             language={language}
+            sellerPhone={settings.sellerPhone || SELLER_PHONE}
+            onShowToast={showToast}
             onClose={() => {
               setAppMode('shop');
               localStorage.setItem('lingo_univers_app_mode', 'shop');
@@ -1180,52 +1189,62 @@ export default function App() {
       ) : (
         /* CLIENT STOREFRONT VIEW */
         <main className="flex-grow animate-fade-in py-4">
-          {/* Custom Elegant Hero Banner with Vibrant linear gradient */}
+          {/* Custom FARESSØ Metallic High-Tech Hero Banner */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-6 mt-2">
-            <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-[#0052FF] to-[#0035A3] shadow-lg text-white">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.1),transparent)] pointer-events-none"></div>
+            <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-slate-950 via-slate-900 to-black border border-slate-800/80 shadow-2xl text-white">
+              {/* High-tech grid overlay */}
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-sky-500/10 via-transparent to-transparent pointer-events-none"></div>
+              <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b15_1px,transparent_1px),linear-gradient(to_bottom,#1e293b15_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div>
+              
               <div className="px-6 py-10 md:py-14 md:px-12 grid grid-cols-1 md:grid-cols-2 gap-8 items-center relative z-10">
                 <div className="space-y-5">
-                  <span className="inline-flex items-center gap-1.5 bg-white/15 text-white text-xs font-bold px-3.5 py-1.5 rounded-full border border-white/10 uppercase tracking-widest leading-none">
-                    <Lock className="w-3 h-3 text-sky-200" /> Boutiques Assurées SSL
-                  </span>
-                  <h1 className="font-display font-black text-3xl sm:text-4xl lg:text-5xl text-white tracking-tight leading-tight">
-                    Achetez en Sécurité en <span className="underline decoration-white/30 decoration-wavy">Dinars Algériens</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 bg-slate-800/80 text-sky-400 text-xs font-mono font-bold px-3.5 py-1.5 rounded-full border border-sky-500/30 uppercase tracking-widest">
+                      <Lock className="w-3.5 h-3.5 text-sky-400" /> BOUTIQUE OFFICIELLE FARESSØ
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 bg-amber-500/10 text-amber-400 text-xs font-mono font-bold px-3 py-1.5 rounded-full border border-amber-500/30 uppercase">
+                      ⚡ HIGH-TECH 100W PD & GaN
+                    </span>
+                  </div>
+
+                  <h1 className="font-display font-black text-3xl sm:text-4xl lg:text-5xl text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-100 to-slate-400 tracking-tight leading-tight">
+                    Power • Connect • Go <br />
+                    <span className="text-sky-400 text-2xl sm:text-3xl font-mono">L'Écosystème de Charge Ultime</span>
                   </h1>
-                  <p className="text-white/85 text-xs sm:text-sm leading-relaxed max-w-lg">
-                    Profitez d'une expérience e-commerce premium sur <b>{settings.storeName}</b>. Ajoutez au panier, simulez votre paiement sécurisé ou réglez par BaridiMob, et faites-vous livrer chez vous dans les 58 wilayas d'Algérie !
+
+                  <p className="text-slate-300 text-xs sm:text-sm leading-relaxed max-w-lg font-sans">
+                    Bienvenue sur la boutique officielle <b className="text-white">FARESSØ.official</b>. Découvrez notre gamme certifiée de câbles tressés renforcés 100W, nos chargeurs ultra-rapides GaN III, nos Power Banks MagSafe et hubs haute performance. Livraison express disponible dans les 58 wilayas d'Algérie !
                   </p>
 
-                  {/* Secure Trust stats */}
-                  <div className="grid grid-cols-3 gap-4 pt-4 border-t border-white/10">
-                    <div>
-                      <p className="font-display font-black text-white text-lg tracking-tight">58 Wilayas</p>
-                      <p className="text-white/60 text-[9px] font-bold uppercase tracking-wider">Livraison Rapide d'expédition</p>
+                  {/* High-tech feature badges */}
+                  <div className="grid grid-cols-3 gap-3 pt-4 border-t border-slate-800">
+                    <div className="bg-slate-900/80 p-2.5 rounded-2xl border border-slate-800/80">
+                      <p className="font-display font-black text-white text-base tracking-tight">100W PD</p>
+                      <p className="text-slate-400 text-[9px] font-mono uppercase tracking-wider">Câbles Tressés</p>
                     </div>
-                    <div>
-                      <p className="font-display font-black text-white text-lg tracking-tight">CIB & Baridi</p>
-                      <p className="text-white/60 text-[9px] font-bold uppercase tracking-wider">Paiement Garanti</p>
+                    <div className="bg-slate-900/80 p-2.5 rounded-2xl border border-slate-800/80">
+                      <p className="font-display font-black text-white text-base tracking-tight">65W GaN III</p>
+                      <p className="text-slate-400 text-[9px] font-mono uppercase tracking-wider">Charge Ultra-Rapide</p>
                     </div>
-                    <div>
-                      <p className="font-display font-black text-white text-lg tracking-tight">24h/24 Support</p>
-                      <p className="text-white/60 text-[9px] font-bold uppercase tracking-wider">Au {settings.sellerPhone}</p>
+                    <div className="bg-slate-900/80 p-2.5 rounded-2xl border border-slate-800/80">
+                      <p className="font-display font-black text-white text-base tracking-tight">58 Wilayas</p>
+                      <p className="text-slate-400 text-[9px] font-mono uppercase tracking-wider">Livraison à Domicile</p>
                     </div>
                   </div>
                 </div>
 
-                {/* Promo Banner / Illustration block */}
-                <div className="hidden md:flex relative h-72 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 items-center justify-center p-8 group">
-                  <div className="text-center space-y-4 max-w-sm">
-                    <div className="inline-flex p-4 bg-white/15 text-white rounded-full mb-1">
-                      <ShieldCheck className="w-10 h-10" />
+                {/* Metallic Logo Showcase Card */}
+                <div className="flex relative h-80 bg-slate-900/90 backdrop-blur-xl rounded-3xl border border-slate-800 items-center justify-center p-8 shadow-2xl overflow-hidden group">
+                  <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-sky-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                  <div className="text-center space-y-4 max-w-sm relative z-10 flex flex-col items-center">
+                    {/* Metallic Logo Display */}
+                    <div className="p-4 bg-black/60 rounded-2xl border border-slate-800 shadow-inner w-full flex justify-center">
+                      <FaressoLogo size="xl" showTagline={true} showIcons={true} />
                     </div>
-                    <h3 className="font-display font-bold text-white text-lg leading-tight">Achetez en Confiance sur {settings.storeName}</h3>
-                    <p className="text-[11px] text-white/85 leading-normal">
-                      La sécurité de vos fonds est assurée. Nous supportons la vérification par OTP Card et le dépôt sécurisé d'avoirs au compte de virement. 
-                    </p>
-                    <a href={`tel:${settings.sellerPhone}`} className="inline-flex items-center gap-1.5 text-xs text-[#0052FF] font-bold bg-white hover:bg-slate-50 px-5 py-2.5 rounded-full shadow-md transition-all cursor-pointer">
-                      <Phone className="w-3.5 h-3.5" />
-                      Appel Direct : {settings.sellerPhone}
+
+                    <a href={`tel:${settings.sellerPhone}`} className="inline-flex items-center gap-2 text-xs font-black text-slate-950 bg-gradient-to-r from-white via-slate-100 to-slate-300 hover:from-sky-300 hover:to-white px-6 py-3 rounded-xl shadow-lg transition-all cursor-pointer transform hover:scale-105 mt-2">
+                      <Phone className="w-4 h-4 text-slate-950" />
+                      Contact Direct FARESSØ : {settings.sellerPhone}
                     </a>
                   </div>
                 </div>
@@ -1235,12 +1254,12 @@ export default function App() {
 
           {/* Animated "Why Choose Us" Section */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-8" dir={language === 'ar' ? 'rtl' : 'ltr'}>
-            <div className="bg-white border border-slate-150 rounded-[32px] p-6 sm:p-8 shadow-sm">
+            <div className="bg-[#0E1017] border border-slate-800/80 rounded-[32px] p-6 sm:p-8 shadow-2xl">
               <div className="text-center max-w-xl mx-auto mb-6">
-                <h2 className="font-display font-black text-slate-950 text-base sm:text-lg tracking-tight">
+                <h2 className="font-display font-black text-slate-100 text-base sm:text-lg tracking-tight">
                   {translate('why_choose_us_title', language)}
                 </h2>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-slate-400 mt-1">
                   {language === 'ar' ? 'نلتزم بتقديم أفضل تجربة تسوق إلكتروني آمنة وموثوقة لزبائننا في الجزائر' : 'Nous nous engageons à offrir la meilleure expérience d\'achat en ligne sécurisée et fiable en Algérie.'}
                 </p>
               </div>
@@ -1248,11 +1267,11 @@ export default function App() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
                 
                 {/* Metric 1 */}
-                <div className="space-y-1.5 p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-sky-500/30 transition-all">
-                  <div className="text-sky-600 font-display font-black text-xl sm:text-2xl tracking-tight">
+                <div className="space-y-1.5 p-4 bg-slate-950/80 rounded-2xl border border-slate-800/80 hover:border-sky-500/40 transition-all">
+                  <div className="text-sky-400 font-mono font-black text-xl sm:text-2xl tracking-tight">
                     +{clientsCount.toLocaleString()}
                   </div>
-                  <p className="text-xs font-bold text-slate-800">
+                  <p className="text-xs font-bold text-slate-200">
                     {language === 'ar' ? 'زبون راضٍ وفخور' : 'Clients Satisfaits'}
                   </p>
                   <p className="text-[10px] text-slate-400 font-medium">
@@ -1261,11 +1280,11 @@ export default function App() {
                 </div>
 
                 {/* Metric 2 */}
-                <div className="space-y-1.5 p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-sky-500/30 transition-all">
-                  <div className="text-[#FF5C00] font-display font-black text-xl sm:text-2xl tracking-tight">
+                <div className="space-y-1.5 p-4 bg-slate-950/80 rounded-2xl border border-slate-800/80 hover:border-sky-500/40 transition-all">
+                  <div className="text-amber-400 font-mono font-black text-xl sm:text-2xl tracking-tight">
                     {wilayasCount} {language === 'ar' ? 'ولاية' : 'Wilayas'}
                   </div>
-                  <p className="text-xs font-bold text-slate-800">
+                  <p className="text-xs font-bold text-slate-200">
                     {language === 'ar' ? 'شحن لجميع الولايات' : 'Wilayas Desservies'}
                   </p>
                   <p className="text-[10px] text-slate-400 font-medium">
@@ -1274,11 +1293,11 @@ export default function App() {
                 </div>
 
                 {/* Metric 3 */}
-                <div className="space-y-1.5 p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-sky-500/30 transition-all">
-                  <div className="text-emerald-600 font-display font-black text-xl sm:text-2xl tracking-tight">
+                <div className="space-y-1.5 p-4 bg-slate-950/80 rounded-2xl border border-slate-800/80 hover:border-sky-500/40 transition-all">
+                  <div className="text-emerald-400 font-mono font-black text-xl sm:text-2xl tracking-tight">
                     {satisfactionRate}%
                   </div>
-                  <p className="text-xs font-bold text-slate-800">
+                  <p className="text-xs font-bold text-slate-200">
                     {language === 'ar' ? 'معدل الرضا والقبول' : 'Clients Heureux'}
                   </p>
                   <p className="text-[10px] text-slate-400 font-medium">
@@ -1287,11 +1306,11 @@ export default function App() {
                 </div>
 
                 {/* Metric 4 */}
-                <div className="space-y-1.5 p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-sky-500/30 transition-all">
-                  <div className="text-indigo-600 font-display font-black text-xl sm:text-2xl tracking-tight">
+                <div className="space-y-1.5 p-4 bg-slate-950/80 rounded-2xl border border-slate-800/80 hover:border-sky-500/40 transition-all">
+                  <div className="text-indigo-400 font-mono font-black text-xl sm:text-2xl tracking-tight">
                     {supportHours}h/7 & {language === 'ar' ? '٢٤س' : '24h'}
                   </div>
-                  <p className="text-xs font-bold text-slate-800">
+                  <p className="text-xs font-bold text-slate-200">
                     {language === 'ar' ? 'دعم متواصل على مدار الساعة' : 'Support Client 24/7'}
                   </p>
                   <p className="text-[10px] text-slate-400 font-medium">

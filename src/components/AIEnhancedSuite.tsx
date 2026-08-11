@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { safeLocalStorage as localStorage } from '../lib/safeStorage';
 import { 
   Sparkles, ShoppingBag, Eye, HelpCircle, ArrowRight, X, ArrowUp, Check, 
   RotateCw, RefreshCw, Layers, ShieldCheck, Heart, User, CheckCircle2,

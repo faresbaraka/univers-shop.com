@@ -2,11 +2,27 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 dotenv.config();
 
 let aiClient: GoogleGenAI | null = null;
+
+// Clean and safely parse JSON strings returned by Gemini
+function safeParseJson(text: string): any {
+  let cleaned = text.trim();
+  // Remove markdown code blocks if present
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
+  }
+  // Find the first outer '{' and the last outer '}' to crop any accidental junk text
+  const startIdx = cleaned.indexOf("{");
+  const endIdx = cleaned.lastIndexOf("}");
+  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    cleaned = cleaned.substring(startIdx, endIdx + 1);
+  }
+  return JSON.parse(cleaned);
+}
 
 function getGeminiClient(): GoogleGenAI | null {
   if (!aiClient) {
@@ -123,9 +139,9 @@ ${JSON.stringify(products || [], null, 2)}
         parts: [{ text: msg.content }]
       }));
 
-      // Initiate streaming request to Gemini 2.5 Flash
+      // Initiate streaming request to Gemini 3.5 Flash
       const responseStream = await client.models.generateContentStream({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.5-flash",
         contents,
         config: {
           systemInstruction,
@@ -231,7 +247,73 @@ ${JSON.stringify(products || [], null, 2)}
     }
   });
 
-  // Dynamic Gemini Language Exercises Generator Endpoint
+  // Dynamic AI Product Description Generator Endpoint
+  app.post("/api/generate-description", async (req, res) => {
+    try {
+      const { name, category, condition, size, brand, language } = req.body;
+      if (!name) {
+        return res.status(400).json({ error: "Le nom de l'article est requis." });
+      }
+
+      const client = getGeminiClient();
+      if (!client) {
+        // Fallback description generator
+        const brandStr = brand ? ` (${brand})` : "";
+        const sizeStr = size ? `\n- Spécifications / Taille : ${size}` : "";
+        const lang = language || "fr";
+
+        let fallbackText = "";
+        if (lang === "ar") {
+          fallbackText = `السلام عليكم، أضع بين أيديكم للبيع: ${name}${brandStr}.
+- القسم: ${category || "عام"}
+- الحالة: ${condition || "ممتازة"}${sizeStr}
+
+الغرض في حالة ممتازة ومثالي للاستخدام اليومي. البيع مستعجل وبسعر جد معقول.
+الرجاء التواصل معي مباشرة للمزيد من التفاصيل أو لتنسيق التسليم. شكراً !`;
+        } else {
+          fallbackText = `Bonjour, je mets en vente cet article d'occasion : ${name}${brandStr}.
+- Catégorie : ${category || "Autre"}
+- État : ${condition || "Bon état"}${sizeStr}
+
+L'objet fonctionne parfaitement et est prêt à l'usage. Vente rapide et prix très raisonnable.
+N'hésitez pas à me contacter pour plus d'informations ou pour convenir d'un rendez-vous.`;
+        }
+        return res.json({ description: fallbackText });
+      }
+
+      const prompt = `You are a professional e-commerce copywriter. Generate an extremely appealing, high-converting product description for a second-hand item being sold on a premium local Algerian marketplace (Vinted Corner style).
+
+Item Details:
+- Name: "${name}"
+- Category: "${category || 'N/A'}"
+- Condition: "${condition || 'N/A'}"
+- Size / Specifications: "${size || 'N/A'}"
+- Brand: "${brand || 'N/A'}"
+- Target Language: "${language || 'fr'}" (Must be strictly 'fr' for French or 'ar' for Arabic)
+
+CRITICAL WRITING DIRECTIVES:
+1. Make it professional, captivating, and highly trustworthy.
+2. Structure the description with bullet points (e.g. details, specifications, condition, reason for selling/use cases).
+3. Use engaging emojis (e.g., ✨, 👗, 👞, 📱, 👌, 🇩🇿) suitable for a fashionable secondhand sale in Algeria.
+4. Mention that hand-to-hand delivery is preferred or delivery can be organized.
+5. Keep it clear, concise, and beautifully formatted. Do NOT include markdown code blocks or wrapping text outside of the direct description output. Just return the description text directly.`;
+
+      const response = await client.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          temperature: 0.8
+        }
+      });
+
+      const description = response.text || "";
+      return res.json({ description: description.trim() });
+    } catch (err: any) {
+      console.error("Error generating product description:", err);
+      return res.status(500).json({ error: "Erreur lors de la génération de la description." });
+    }
+  });
+
   app.post("/api/lingo/generate-exercises", async (req, res) => {
     try {
       const { category, targetLang } = req.body;
@@ -274,46 +356,69 @@ ${JSON.stringify(products || [], null, 2)}
         return res.json(fallbackData);
       }
 
-      const prompt = `You are an expert language teacher. Generate an interactive quiz for a student learning the language with code '${lang}' in the category '${cat}'.
-You must return a single JSON object with the exact structure:
-{
-  "matchPairs": [
-    {"foreign": "word in target language relating to category", "native": "French translation"},
-    {"foreign": "word in target language relating to category", "native": "French translation"},
-    {"foreign": "word in target language relating to category", "native": "French translation"},
-    {"foreign": "word in target language relating to category", "native": "French translation"}
-  ],
-  "wordBank": {
-    "targetPhrase": "A full sentence in target language (e.g., 'I want to buy this')",
-    "translation": "French translation of that full sentence",
-    "availableWords": ["Word1", "Word2", "Word3", "distractor1", "distractor2", "distractor3"],
-    "correctWords": ["Word1", "Word2", "Word3"],
-    "pronunciation": "Phonetic pronunciation guide"
-  },
-  "multipleChoice": {
-    "targetPhrase": "Another phrase in target language to check comprehension",
-    "options": ["Correct French translation", "Incorrect translation 1", "Incorrect translation 2"],
-    "correctIndex": 0,
-    "pronunciation": "Phonetic pronunciation guide"
-  }
-}
-Return ONLY valid JSON. Do not include markdown or backticks. Translate terms accurately and make the content interesting and realistic for category '${cat}' (options: voyage, commerce, vivre_la_bas, loisir).`;
-
-      const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          temperature: 0.8
-        }
-      });
-
-      const responseText = response.text || "";
       try {
-        const parsed = JSON.parse(responseText.trim());
-        return res.json(parsed);
-      } catch (parseErr) {
-        console.error("Failed to parse Gemini response for exercises. Content was:", responseText);
+        const prompt = `You are an expert language teacher. Generate an interactive quiz for a student learning the language with code '${lang}' in the category '${cat}'.
+Generate matching terms, word sorting exercises, and multiple choice questions.
+Translate terms accurately and make the content interesting, useful, and realistic for category '${cat}' (options: voyage, commerce, vivre_la_bas, loisir).`;
+
+        const response = await client.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                matchPairs: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      foreign: { type: Type.STRING, description: `A word or short phrase in target language '${lang}'` },
+                      native: { type: Type.STRING, description: "The exact translation in French" }
+                    },
+                    required: ["foreign", "native"]
+                  },
+                  description: "List of 4 distinct matching word/phrase pairs."
+                },
+                wordBank: {
+                  type: Type.OBJECT,
+                  properties: {
+                    targetPhrase: { type: Type.STRING, description: `A full meaningful sentence in target language '${lang}'` },
+                    translation: { type: Type.STRING, description: "The exact French translation of the sentence." },
+                    availableWords: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Individual words from the target phrase mixed with 3-4 distraction words to choose from." },
+                    correctWords: { type: Type.ARRAY, items: { type: Type.STRING }, description: "The correct sequence of words in the target language that forms the targetPhrase." },
+                    pronunciation: { type: Type.STRING, description: "Phonetic pronunciation guide written for a French speaker." }
+                  },
+                  required: ["targetPhrase", "translation", "availableWords", "correctWords", "pronunciation"]
+                },
+                multipleChoice: {
+                  type: Type.OBJECT,
+                  properties: {
+                    targetPhrase: { type: Type.STRING, description: `A question or phrase in target language '${lang}'` },
+                    options: { type: Type.ARRAY, items: { type: Type.STRING }, description: "3 different translation options in French, only one of which must be correct." },
+                    correctIndex: { type: Type.INTEGER, description: "The 0-based index of the correct option inside the options array." },
+                    pronunciation: { type: Type.STRING, description: "Phonetic pronunciation guide written for a French speaker." }
+                  },
+                  required: ["targetPhrase", "options", "correctIndex", "pronunciation"]
+                }
+              },
+              required: ["matchPairs", "wordBank", "multipleChoice"]
+            },
+            temperature: 0.8
+          }
+        });
+
+        const responseText = response.text || "";
+        try {
+          const parsed = safeParseJson(responseText);
+          return res.json(parsed);
+        } catch (parseErr) {
+          console.error("Failed to parse Gemini response for exercises. Content was:", responseText);
+          return res.json(fallbackData);
+        }
+      } catch (geminiErr: any) {
+        console.warn("Gemini API call failed for generate-exercises. Falling back to offline exercises fallback. Error:", geminiErr.message || geminiErr);
         return res.json(fallbackData);
       }
     } catch (err: any) {
@@ -325,133 +430,249 @@ Return ONLY valid JSON. Do not include markdown or backticks. Translate terms ac
   // AI Voice Coach Call Session Endpoint
   app.post("/api/lingo/voice-session", async (req, res) => {
     try {
-      const { transcription, history, targetLang, category } = req.body;
+      const { transcription, history, targetLang, category, callMode } = req.body;
       const lang = targetLang || "en";
       const cat = category || "voyage";
+      const mode = callMode || "exercises";
 
-      const client = getGeminiClient();
-      if (!client) {
-        // Fallback simulated chat coach
+      // Comprehensive offline fallback database for all 10 target languages
+      const fallbackPhrases: Record<string, { start: string; startNext: string; matchExplanation: string; matchSpeech: string; matchNext: string; failSpeech: string; failExplanation: string; failNext: string }> = {
+        en: {
+          start: "Hello! I am your language coach Lia. What is your goal in learning English, and what are your main weaknesses? (Quel est ton but principal ou tes difficultés ?)",
+          startNext: "Partagez vos objectifs de langue ou vos points faibles.",
+          matchExplanation: "✨ Merveilleux début ! Vous vous exprimez très bien. Nous allons progresser ensemble. Travaillons sur la livraison d'articles !",
+          matchSpeech: "Excellent! Let's practice with this sentence: 'The delivery is very fast and secure.' Repeat with me!",
+          matchNext: "Prononcez : 'The delivery is very fast and secure.'",
+          failSpeech: "Don't worry, we are here to learn. Repeat after me: 'How much does it cost?'",
+          failExplanation: "💡 Explication : C'est normal de faire des erreurs ! Cette phrase signifie 'Combien ça coûte ?'. En anglais : 'How much does it cost?'. N'hésitez pas à répéter.",
+          failNext: "Répétez la phrase simple après Lia."
+        },
+        es: {
+          start: "¡Hola! Soy tu entrenadora de idiomas Lia. ¿Cuál es tu objetivo al aprender español y cuáles son tus puntos débiles? (Quel est ton but principal ou tes difficultés ?)",
+          startNext: "Partagez vos objectifs de langue ou vos points faibles.",
+          matchExplanation: "✨ Excellent ! Vous parlez déjà très bien. Pratiquons maintenant le vocabulaire du commerce et de la livraison.",
+          matchSpeech: "¡Excelente! Vamos a practicar con esta frase de entrega: 'El envío es muy rápido y seguro.' ¡Repite conmigo!",
+          matchNext: "Prononcez : 'El envío es muy rápido y seguro.'",
+          failSpeech: "No te preocupe. Estoy aquí para ayudarte. Repite conmigo: '¿Cuánto cuesta?'",
+          failExplanation: "💡 Explication : Les erreurs sont normales. Cette phrase signifie 'Combien ça coûte ?'. En espagnol : '¿Cuánto cuesta?'. Répétez tranquillement.",
+          failNext: "Répétez la phrase simple après Lia."
+        },
+        de: {
+          start: "Hallo! Ich bin deine Sprachtrainerin Lia. Was ist dein Ziel beim Deutschlernen und was sind deine Schwachstellen? (Quel est ton but principal ou tes difficultés ?)",
+          startNext: "Partagez vos objectifs de langue ou vos points faibles.",
+          matchExplanation: "✨ Très bon début ! Vos bases en allemand sont encourageantes. Travaillons sur le commerce de vêtements.",
+          matchSpeech: "Hervorragend! Lass uns mit diesem Satz üben: 'Die Lieferung ist sehr schnell und sicher.' Sprich mir nach!",
+          matchNext: "Prononcez : 'Die Lieferung ist sehr schnell und sicher.'",
+          failSpeech: "Keine Sorge, ich bin hier um dir zu helfen. Wiederhole mit mir: 'Wie viel kostet das?'",
+          failExplanation: "💡 Explication : C'est en faisant des erreurs qu'on apprend. La phrase signifie 'Combien ça coûte ?'. En allemand : 'Wie viel kostet das?'. Répétez après moi.",
+          failNext: "Répétez la phrase simple après Lia."
+        },
+        it: {
+          start: "Ciao! Sono la tua insegnante di lingua Lia. Qual è il tuo obiettivo nell'apprendimento dell'italiano e quali sono le tue difficoltà? (Quel est ton but principal ou tes difficultés ?)",
+          startNext: "Partagez vos objectifs de langue ou vos points faibles.",
+          matchExplanation: "✨ Magnifico! Un ottimo inizio. Pratiquons maintenant le vocabulaire de la mode et de l'expédition.",
+          matchSpeech: "Eccellente! Pratichiamo con questa frase: 'La spedizione è molto veloce e sicura.' Ripeti con me!",
+          matchNext: "Prononcez : 'La spedizione è molto veloce e sicura.'",
+          failSpeech: "Non ti preoccupare, sono qui per aiutarti. Ripeti con me: 'Quanto costa?'",
+          failExplanation: "💡 Explication : Ne vous inquiétez pas, l'italien s'apprend pas à pas. 'Quanto costa?' signifie 'Combien ça coûte ?'. Répétez tranquillement.",
+          failNext: "Répétez la phrase simple après Lia."
+        },
+        tr: {
+          start: "Merhaba! Ben dil koçunuz Lia. Türkçe öğrenmedeki hedefiniz nedir ve en çok nerede zorlanıyorsunuz? (Quel est ton but principal ou tes difficultés ?)",
+          startNext: "Partagez vos objectifs de langue ou vos points faibles.",
+          matchExplanation: "✨ Harika! Très bien formulé. Travaillons maintenant sur la commande d'un vêtement en turc.",
+          matchSpeech: "Harika! Şu cümleyle pratik yapalım: 'Teslimat çok hızlı ve güvenli.' Benimle tekrar edin!",
+          matchNext: "Prononcez : 'Teslimat çok hızlı ve güvenli.'",
+          failSpeech: "Endişelenmeyin, size yardım etmek için buradayım. Benimle tekrar edin: 'Bu ne kadar?'",
+          failExplanation: "💡 Explication : Pas de soucis, le turc est une langue très logique. 'Bu ne kadar?' signifie 'Combien ça coûte ?'. Répétez doucement.",
+          failNext: "Répétez la phrase simple après Lia."
+        },
+        ar: {
+          start: "مرحباً! أنا مدربتك اللغوية ليا. ما هو هدفك من تعلم اللغة العربية وما هي نقاط ضعفك؟ (Quel est ton but principal ou tes difficultés ?)",
+          startNext: "Partagez vos objectifs de langue ou vos points faibles.",
+          matchExplanation: "✨ رائع جداً! إجابة ممتازة وسليمة. دعنا نتدرب الآن على التوصيل والشراء.",
+          matchSpeech: "ممتاز! فلنتدرب على هذه الجملة: 'التوصيل سريع جداً وآمن.' كرر معي!",
+          matchNext: "Prononcez : 'التوصيل سريع جداً وآمن.'",
+          failSpeech: "لا تقلق، أنا هنا لمساعدتك. كرر معي: 'كم ثمن هذا؟'",
+          failExplanation: "💡 توضيح: لا بأس بالخطأ، فنحن نتعلم بالتدريج. جملة 'كم ثمن هذا؟' تعني 'Combien coûte ceci ?'. كررها ببطء.",
+          failNext: "Répétez la phrase simple après Lia."
+        },
+        fr: {
+          start: "Bonjour ! Je suis Lia, votre coach de français. Quel est votre objectif d'apprentissage et quelles sont vos principales difficultés ?",
+          startNext: "Partagez vos objectifs de langue ou vos points faibles.",
+          matchExplanation: "✨ Excellent français ! Votre prononciation est impeccable. Continuons sur le vocabulaire e-commerce.",
+          matchSpeech: "Superbe ! Répétez après moi : 'La livraison de ce colis est extrêmement rapide et sécurisée.'",
+          matchNext: "Prononcez : 'La livraison de ce colis est extrêmement rapide et sécurisée.'",
+          failSpeech: "Ne vous inquiétez pas, tout s'apprend ! Répétez avec moi : 'Combien coûte cet article ?'",
+          failExplanation: "💡 Explication : Prenez votre temps. La phrase clé pour demander un tarif est : 'Combien coûte cet article ?'. Reprenez à votre rythme.",
+          failNext: "Répétez la phrase simple après Lia."
+        },
+        ru: {
+          start: "Привет! Я твой тренер по языку Лия. Какова твоя цель в изучении русского языка и какие у тебя трудности? (Quel est ton but principal ou tes difficultés ?)",
+          startNext: "Partagez vos objectifs de langue ou vos points faibles.",
+          matchExplanation: "✨ Отлично! Une superbe réponse en russe. Pratiquons le vocabulaire des commandes en ligne.",
+          matchSpeech: "Отлично! Давай попрактикуемся с этой фразой: 'Доставка очень быстрая и безопасная.' Повторяй за мной!",
+          matchNext: "Prononcez : 'Доставка очень быстрая и безопасная.'",
+          failSpeech: "Не переживай, я здесь, чтобы помочь. Повторяй за мной: 'Сколько это стоит?'",
+          failExplanation: "💡 Explication : C'est normal de buter au début, le russe est очень богатый (très riche). 'Сколько это стоит?' signifie 'Combien ça coûte ?'. Répétez doucement.",
+          failNext: "Répétez la phrase simple après Lia."
+        },
+        ja: {
+          start: "こんにちは！語学コーチのリアです。日本語を学ぶ目的は何ですか？また、苦手なところはどこですか？ (Quel est ton but principal ou tes difficultés ?)",
+          startNext: "Partagez vos objectifs de langue ou vos points faibles.",
+          matchExplanation: "✨ 素晴らしい！ C'est parfait. Pratiquons maintenant l'achat en ligne en japonais.",
+          matchSpeech: "素晴らしいですね！次のフレーズを練習しましょう：'配送はとても早くて安全です。' リピートしてください！",
+          matchNext: "Prononcez : '配送はとても早くて安全です。'",
+          failSpeech: "心配しないで、私がサポートします。リピートしてください：'いくらですか？'",
+          failExplanation: "💡 Explication : C'est normal, le japonais s'apprend par l'usage quotidien. 'いくらですか？' (Ikura desu ka?) signifie 'Combien ça coûte ?'. Reprenez sereinement.",
+          failNext: "Répétez la phrase simple après Lia."
+        },
+        zh: {
+          start: "你好！我是你的语言教练莉亚。你学习中文的目标是什么？你觉得最难的是什么？ (Quel est ton but principal ou tes difficultés ?)",
+          startNext: "Partagez vos objectifs de langue ou vos points faibles.",
+          matchExplanation: "✨ 太棒了！ Une prononciation et une grammaire admirables. Travaillons sur les achats.",
+          matchSpeech: "太棒了！让我们练习这个句子：'配送非常快速且安全。' 跟我读！",
+          matchNext: "Prononcez : '配送非常快速且安全。'",
+          failSpeech: "别担心，我会帮助你的。跟我读：'这个多少钱？'",
+          failExplanation: "💡 Explication : Le chinois nécessite de la patience. '这个多少钱？' (Zhège duōshǎo qián?) signifie 'Combien coûte ceci ?'. Répétez doucement.",
+          failNext: "Répétez la phrase simple après Lia."
+        }
+      };
+
+      const defaultLangData = fallbackPhrases[lang] || fallbackPhrases["en"];
+
+      const runVoiceFallback = () => {
+        // High fidelity multi-lingual simulator fallback
         const isStart = !transcription;
-        let speechText = "";
-        let corrections = "";
-        let nextTask = "";
-
         if (isStart) {
-          speechText = lang === "es"
-            ? "¡Hola! Soy tu entrenadora de idiomas Lia. ¿Cuál es tu objetivo al aprender español y cuáles son tus puntos débiles? (En français : Quel est ton but et tes points faibles ?)"
-            : lang === "de"
-            ? "Hallo! Ich bin deine Sprachtrainerin Lia. Was ist dein Ziel beim Deutschlernen und was sind deine Schwachstellen? (En français : Quel est ton but et tes points faibles ?)"
-            : "Hello! I am your language coach Lia. What is your goal in learning English and what are your main weaknesses? (En français : Quel est ton but et tes points faibles ?)";
-          corrections = "💡 Lia a lancé l'appel ! Dites-lui votre but d'apprentissage ou vos points faibles pour qu'elle puisse adapter ses exercices.";
-          nextTask = "Partage ton but ou tes points faibles (par exemple: parler, grammaire, voyager...)";
-        } else {
-          const userWords = transcription.toLowerCase();
-          const isUserLost = userWords.includes("sais pas") || userWords.includes("comprends pas") || userWords.includes("pas la réponse") || userWords.includes("aide") || userWords.includes("lost") || userWords.includes("perdu") || userWords.includes("pourquoi") || userWords.includes("connais pas");
-          
-          if (isUserLost) {
-            speechText = lang === "es"
-              ? "No te preocupes. Estoy aquí para ayudarte. Vamos a ir paso a paso. Repite conmigo: '¿Cuánto cuesta?'"
-              : lang === "de"
-              ? "Keine Sorge. Ich bin hier, um dir zu helfen. Lass uns Schritt für Schritt gehen. Wiederhole mit mir: 'Wie viel kostet das?'"
-              : "Don't worry. I am here to help you. Let's go step by step. Repeat after me: 'How much does it cost?'";
-            corrections = `💡 Explication (Français) : C'est tout à fait normal de ne pas savoir ! L'apprentissage se fait par essais et erreurs. La phrase demandée signifie 'Combien coûte cette livraison ?'. En anglais, on dit 'How much does this delivery cost?'. N'hésite pas à répéter à ton rythme !`;
-            nextTask = "Répétez la phrase simple après Lia.";
+          if (mode === "conversation") {
+            return res.json({
+              speechText: lang === "es" ? "¡Hola! Soy Lia, tu entrenadora de idiomas. ¿Cómo estás hoy? ¿Cómo te llamas?" : "Hello! I am Lia, your language coach. How are you doing today? What is your name?",
+              corrections: "💡 Lia est prête à d'iscuter librement h24 ! Présentez-vous, demandez-lui comment elle va, parlez de ce que vous faites et ce que vous aimez.",
+              nextTask: "Présentez-vous à Lia (Nom, comment ça va, ce que vous aimez...)"
+            });
           } else {
-            const matchesCost = userWords.includes("how") || userWords.includes("much") || userWords.includes("cost") || userWords.includes("delivery") || userWords.includes("cuánto") || userWords.includes("cuesta") || userWords.includes("kostet") || userWords.includes("but") || userWords.includes("objectif") || userWords.includes("voyag") || userWords.includes("parler");
-
-            if (matchesCost) {
-              speechText = lang === "es"
-                ? "¡Excelente! Comprendo perfectamente tu situación. Vamos a practicar con esta frase de entrega: 'El envío es muy rápido.'"
-                : lang === "de"
-                ? "Hervorragend! Ich verstehe deine Situation vollkommen. Lass uns mit diesem Liefersatz üben: 'Die Lieferung ist sehr schnell.'"
-                : "Excellent! I understand your situation perfectly. Let's practice with this delivery phrase: 'The delivery is very fast.'";
-              corrections = `✨ Encouragement : Merveilleuse réponse ! Vous vous exprimez très bien. Nous allons progresser ensemble sur vos objectifs.`;
-              nextTask = lang === "es" ? "Prononcer : 'El envío es muy rápido.'" : lang === "de" ? "Prononcer : 'Die Lieferung ist sehr schnell.'" : "Prononcer : 'The delivery is very fast.'";
-            } else {
-              speechText = lang === "es"
-                ? "Interesante. Te escucho y quiero ayudarte. Dime, ¿puedes repetir: 'Quiero aprender rápido'?"
-                : lang === "de"
-                ? "Interessant. Ich höre dir zu und möchte dir helfen. Sag mir, kannst du wiederholen: 'Ich möchte schnell lernen'?"
-                : "Interesting. I am listening to you and want to help you. Tell me, can you repeat: 'I want to learn fast'?";
-              corrections = `💡 Conseil : J'ai bien reçu votre message : "${transcription}". Continuez à parler librement, je vais vous guider à chaque étape !`;
-              nextTask = "Répétez la phrase d'apprentissage.";
-            }
+            return res.json({
+              speechText: defaultLangData.start,
+              corrections: "💡 Lia a lancé l'appel ! Partagez vos objectifs de langue ou vos difficultés pour commencer votre coaching personnalisé.",
+              nextTask: defaultLangData.startNext
+            });
           }
         }
 
-        return res.json({ speechText, corrections, nextTask });
+        const userWords = transcription.toLowerCase();
+        const isUserLost = userWords.includes("sais pas") || userWords.includes("comprends pas") || userWords.includes("pas la réponse") || userWords.includes("aide") || userWords.includes("lost") || userWords.includes("perdu") || userWords.includes("pourquoi") || userWords.includes("connais pas");
+
+        if (isUserLost) {
+          return res.json({
+            speechText: defaultLangData.failSpeech,
+            corrections: defaultLangData.failExplanation,
+            nextTask: defaultLangData.failNext
+          });
+        }
+
+        if (mode === "conversation") {
+          return res.json({
+            speechText: lang === "es" ? "¡Qué bien! Me gusta mucho hablar contigo. ¿Cuáles son tus pasatiempos favoritos?" : "That's wonderful! I really enjoy talking with you. What are your favorite hobbies?",
+            corrections: "✨ Discussion libre : Lia apprécie votre présentation ! Elle vous demande maintenant quels sont vos loisirs préférés.",
+            nextTask: "Parlez de vos loisirs et demandez à Lia ce qu'elle aime faire."
+          });
+        }
+
+        return res.json({
+          speechText: defaultLangData.matchSpeech,
+          corrections: defaultLangData.matchExplanation,
+          nextTask: defaultLangData.matchNext
+        });
+      };
+
+      const client = getGeminiClient();
+      if (!client) {
+        return runVoiceFallback();
       }
 
-      const historyStr = (history || [])
-        .map((h: any) => `${h.role === 'coach' ? 'Lia' : 'Student'}: "${h.text}"`)
-        .join("\n");
+      try {
+        const historyStr = (history || [])
+          .map((h: any) => `${h.role === 'coach' ? 'Lia' : 'Student'}: "${h.text}"`)
+          .join("\n");
 
-      const prompt = `You are "Lia", an extremely warm, empathetic, and highly professional AI Language Coach simulating a realistic, highly immersive phone call with a student.
+        const prompt = `You are "Lia", an extremely warm, empathetic, friendly, and highly professional AI Language Coach simulating a realistic, highly immersive phone call with a student.
 The student has chosen to practice the language with code '${lang}' in the specialized context of their learning category: '${cat}' (e.g. travel, shipping logistics, living/working abroad, hobbies and entertainment).
+We are currently in the call mode: '${mode}' (options: 'exercises' or 'conversation').
 
 Here is the conversation history so far:
 ${historyStr || "(No conversation history yet - this is the beginning of the call)"}
 
 Student's latest transcription: "${transcription || ""}"
 
-CRITICAL CONVERSATIONAL DIRECTIVES (STRICTLY COMPLY WITH THE STUDENT'S INTENTION):
-1. INITIAL QUESTION (GOAL & WEAK POINT ASSESSMENT):
-   If this is the beginning of the call (i.e. conversation history is empty and transcription is empty, undefined, or indicates starting), Lia MUST ask the student (in target language '${lang}', followed by a brief, friendly French explanation) about:
-   - What is their language learning goal (but / objectif)?
-   - What is their main weakness or struggle (point faible / difficulté)?
-   Example speechText for English: "Hello! I am your language coach Lia. Welcome! What is your main goal in learning English, and what are your main weaknesses? Quel est ton but principal ou tes difficultés ?"
+CRITICAL CONVERSATIONAL DIRECTIVES BASED ON MODE:
 
-2. VOICE CORRECTION & ANALYSIS:
-   Lia MUST analyze the Student's latest transcription ("${transcription || ""}").
-   - If there are grammatical, vocabulary, or pronunciation errors (or if they translated something poorly), provide a constructive, supportive breakdown of the errors in French or Arabic.
-   - If they did well, warmly praise and encourage them.
-   - Explain any new words, grammar concepts, or native idioms relevant to their response, keeping it highly educational.
-   - Write this detailed coach feedback in the "corrections" field. Do not put this in "speechText".
+--- MODE: 'conversation' (Discussion Libre, Présentation & Chat) ---
+- Goal: Engage in a friendly, unlimited, 24/7 free-flowing conversation with the student. Chat about how they are doing, ask them to introduce themselves, share details about yourself when asked (You are Lia, you love teaching languages, you are always available 24/7 to help, you love cultural exchanges, Algerian coffee, and traditional Algerian pastries like baklawa!). Ask them about their interests, daily life, hobbies, or whatever they want to talk about.
+- Do NOT act like a rigid school teacher giving formal tests. Keep the vibe natural, friendly, warm, and highly engaging.
+- In "speechText", respond naturally in the target language '${lang}' (1 to 3 short, friendly sentences). Speak clearly and at a moderate pace.
+- In "corrections" (written 100% in French), provide a highly supportive breakdown of any minor grammar, vocabulary, or pronunciation errors they made in their response. If they did great, warmly praise them and explain any native idioms or cultural facts. If they asked you questions (e.g., "what do you like?", "how are you?"), answer them here in French so they understand fully what you said, while keeping "speechText" in '${lang}'.
+- In "nextTask", suggest a short friendly conversational topic in French (e.g., "Parlez de ce que vous faites dans la vie", "Demandez à Lia ce qu'elle aime faire", "Partagez votre plat préféré").
 
-3. GRACEFUL FRENCH FALLBACK & EMPOWERMENT:
-   If the student's transcription is in French or contains phrases of confusion/defeat like "je ne sais pas", "je ne comprends pas", "je comprends rien", "aide-moi", "je suis perdu", "je ne trouve pas la réponse" or any other French words:
-   - Lia must NOT get frustrated or stop. She must facilitate the student.
-   - Lia must explain what the student didn't understand in the "corrections" field in French/Arabic, breaking it down into simple terms.
-   - In "speechText" (spoken in target language with code '${lang}'), she should speak in a simplified, slow-paced target language to guide them, encouraging them and asking them to repeat a very basic, simple phrase first to build confidence.
+--- MODE: 'exercises' (Exercices de Langue Variés & Riches) ---
+- Goal: Provide the student with a highly diverse set of verbal exercises (NOT just simple translation tasks!).
+- You must rotate through or choose different interactive exercise types from turn to turn:
+  1. **Pronunciation repeating (Prononciation)**: Present a highly useful, realistic sentence in '${lang}' related to '${cat}' and ask the student to repeat it after you exactly.
+  2. **Fill-in-the-blank (Phrases à trous)**: Provide a sentence with one word missing (e.g., "In the sentence 'The delivery arrives ___ Monday', what is the missing preposition?") and ask them to find it.
+  3. **Vocabulary quiz (Vocabulaire)**: Ask for synonyms/antonyms of a word, or ask them to list 3 specific words in '${lang}' related to a topic (e.g., "Name 3 fruits in English" or "Name 3 travel items").
+  4. **Grammar drill (Grammaire)**: Ask them to change a sentence (e.g., convert "I buy shoes" to past tense) or conjugate a specific verb.
+  5. **Scenario roleplay (Mises en situation)**: Set up a realistic scenario (e.g., "You are at a store and want to ask if they accept credit cards. How do you ask the seller in '${lang}'?").
+- In "speechText", present the exercise clearly, warmly, and concisely in target language '${lang}'.
+- In "corrections" (written 100% in French), explain the grammar rule or word meaning, correct their input, and provide encouraging feedback.
+- In "nextTask", write a short, clear instruction in French on what they should speak next (e.g., "Complétez la phrase", "Répétez la phrase", "Répondez au quiz de vocabulaire").
 
-4. KEEP THE CONVERSATION MOVING:
-   - Do NOT just repeat "are you ready for more?". Instead, keep a natural, immersive roleplay conversation!
-   - Based on what the student said, ask a follow-up question or present a realistic situation/exercise (e.g. "Now, imagine you are at the airport. How would you ask where the baggage claim is?" or "Try to say: I would like to order this item").
-   - Ensure the conversation is interactive, teaching them relevant phrases for '${cat}' in '${lang}'.
+GENERAL CORE RULES:
+1. INITIAL GREETING:
+   If this is the beginning of the call (history and transcription are empty), start with a friendly introduction of yourself as Lia and launch the chosen mode:
+   - If conversation mode: greet them, say you are excited to chat, introduce yourself, and ask how they are doing today.
+   - If exercises mode: greet them, say we will do dynamic exercises to boost their skills, and present the first exercise.
+2. SUPPORTIVE CORRECTIONS:
+   Always analyze the student's transcript "${transcription}". Provide the corrections, tips, and translations in French in the "corrections" field.
+3. GRACEFUL FRENCH FALLBACK:
+   If they speak in French or say "je ne sais pas", "je comprends pas", "aide-moi", support them 100%. Explain the answer in French in "corrections" and speak in simplified, slow target language in "speechText" to help them repeat a very simple word/phrase.
+4. DIALOGUE CONSTRAINTS:
+   - "speechText": Must be strictly in target language '${lang}' (no markdown, clean for TTS).
+   - "corrections": Must be 100% in French.
+   - "nextTask": Short, clear instruction in French.`;
 
-5. DIALOGUE CONSTRAINTS:
-   - "speechText": Write this primarily in target language with code '${lang}' (so the speech synthesizer of '${lang}' reads it beautifully without sounding garbled). If the student is deeply lost, you may include very brief, clear French words, but keep the core spoken voice in '${lang}'. Keep it concise (1 to 3 short sentences).
-   - "corrections": Write this 100% in French or Arabic. This is shown on screen and read by the user. Use it to give amazing coaching tips, explain grammatical rules, translate phrases, and analyze the user's input: "${transcription || "(Connecting...)"}".
-   - "nextTask": A very short, clear instruction written in French on what the user should speak/do next.
-
-Format your output exactly as a single valid JSON object:
-{
-  "speechText": "Your direct spoken response strictly in the target language with code '${lang}'",
-  "corrections": "Your detailed grammar/vocabulary corrections, conceptual explanation in French/Arabic, and warm encouragement.",
-  "nextTask": "A short instruction indicating what the user should do or translate next, written in French"
-}`;
-
-      const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          temperature: 0.7
-        }
-      });
-
-      const responseText = response.text || "";
-      try {
-        const parsed = JSON.parse(responseText.trim());
-        return res.json(parsed);
-      } catch (parseErr) {
-        console.error("Failed to parse Gemini voice session response:", responseText);
-        return res.json({
-          speechText: "Pardon, je n'ai pas bien compris. Pouvez-vous répéter ?",
-          corrections: "• Une erreur technique de compréhension est survenue. Réessayez.",
-          nextTask: "Répétez votre phrase s'il vous plaît"
+        const response = await client.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                speechText: { type: Type.STRING, description: "Your direct spoken response strictly in the target language (no markdown, keep it friendly and short for text-to-speech)." },
+                corrections: { type: Type.STRING, description: "Your detailed grammar/vocabulary corrections, conceptual explanation in French, and warm encouragement." },
+                nextTask: { type: Type.STRING, description: "A short instruction in French of what the user should try to say/translate next." }
+              },
+              required: ["speechText", "corrections", "nextTask"]
+            },
+            temperature: 0.7
+          }
         });
+
+        const responseText = response.text || "";
+        try {
+          const parsed = safeParseJson(responseText);
+          return res.json(parsed);
+        } catch (parseErr) {
+          console.error("Failed to parse Gemini voice session response:", responseText);
+          return res.json({
+            speechText: defaultLangData.failSpeech,
+            corrections: "• Une légère erreur d'analyse est survenue. " + defaultLangData.failExplanation,
+            nextTask: defaultLangData.failNext
+          });
+        }
+      } catch (geminiErr: any) {
+        console.warn("Gemini API call failed for voice-session. Falling back to offline voice fallback. Error:", geminiErr.message || geminiErr);
+        return runVoiceFallback();
       }
     } catch (err: any) {
       console.error("Error in AI voice call endpoint:", err);

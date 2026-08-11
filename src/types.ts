@@ -131,6 +131,8 @@ export interface AISuiteState {
   historicalStats: AIHistoricalStats[];
 }
 
+export type AppMode = 'shop' | 'lingo' | 'vinted' | 'faresso';
+
 export interface Review {
   id: string;
   productId: string; // 'site' for general shop reviews, or product ID

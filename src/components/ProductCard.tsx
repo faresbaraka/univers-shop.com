@@ -33,54 +33,54 @@ export default function ProductCard({ product, onAddToCart, onHeart, onShare, la
 
   return (
     <div 
-      className="group relative flex flex-col bg-white rounded-3xl overflow-hidden border border-slate-100 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer"
+      className="group relative flex flex-col bg-[#0E1017] rounded-2xl overflow-hidden border border-slate-800/80 hover:border-sky-500/40 shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 cursor-pointer"
       id={`product-card-${product.id}`}
       onClick={() => onSelect?.(product)}
     >
       {/* Category and stock badge */}
       <div className={`absolute top-3 ${isRtl ? 'right-3' : 'left-3'} z-10 flex flex-wrap gap-1.5 max-w-[80%]`}>
-        <span className="bg-slate-900/80 backdrop-blur-md text-white text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">
+        <span className="bg-slate-950/80 backdrop-blur-md text-slate-300 text-[9px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border border-slate-800">
           {product.category}
         </span>
         {product.stock < 3 && product.stock > 0 && (
-          <span className="bg-amber-500/90 backdrop-blur-md text-white text-[9px] font-bold px-2 py-0.5 rounded-full">
+          <span className="bg-amber-500/90 backdrop-blur-md text-slate-950 text-[9px] font-mono font-bold px-2.5 py-0.5 rounded-full">
             {language === 'ar' ? 'وشك النفاد' : language === 'en' ? 'Almost Out' : 'Presque épuisé'}
           </span>
         )}
         {product.originalPrice && product.originalPrice > product.price && (
-          <span className="bg-red-600/95 backdrop-blur-md text-white text-[9px] font-black px-2 py-0.5 rounded-full flex items-center gap-0.5 animate-pulse">
+          <span className="bg-rose-600/90 backdrop-blur-md text-white text-[9px] font-mono font-black px-2 py-0.5 rounded-full flex items-center gap-0.5">
             -{Math.round((1 - product.price / product.originalPrice) * 100)}%
           </span>
         )}
       </div>
 
       {/* SSL badge over product for trust */}
-      <div className={`absolute top-3 ${isRtl ? 'left-3' : 'right-3'} z-10 text-[9px] bg-emerald-500/90 backdrop-blur-md text-white px-2 py-1 rounded-full font-semibold flex items-center gap-1 shadow-xs shadow-emerald-500/10`}>
-        <ShieldCheck className="w-3 h-3" />
-        <span className="hidden xs:inline">{language === 'ar' ? 'آمن 100%' : language === 'en' ? 'Secure Buy' : 'Achat Sécurisé'}</span>
+      <div className={`absolute top-3 ${isRtl ? 'left-3' : 'right-3'} z-10 text-[9px] bg-slate-950/80 backdrop-blur-md text-emerald-400 border border-emerald-500/30 px-2 py-1 rounded-full font-mono font-bold flex items-center gap-1 shadow-sm`}>
+        <ShieldCheck className="w-3 h-3 text-emerald-400" />
+        <span className="hidden xs:inline">{language === 'ar' ? 'آمن 100%' : language === 'en' ? 'Secure' : 'Sécurisé'}</span>
       </div>
 
       {/* Product Image */}
-      <div className="relative aspect-square w-full bg-slate-50 overflow-hidden">
+      <div className="relative aspect-square w-full bg-slate-950 overflow-hidden">
         <img
           src={product.imageUrl}
           alt={product.name}
           referrerPolicy="no-referrer"
-          className="h-full w-full object-cover object-center group-hover:scale-105 transition-transform duration-500 rounded-t-3xl"
+          className="h-full w-full object-cover object-center group-hover:scale-105 transition-transform duration-500 rounded-t-2xl opacity-90 group-hover:opacity-100"
         />
         
         {/* Trust Badges directly on image corner */}
         <div className={`absolute bottom-3 ${isRtl ? 'right-3' : 'left-3'} z-10 flex flex-col gap-1.5`}>
           {isPopular && (
-            <span className="bg-sky-500/90 backdrop-blur-md text-white text-[9px] font-extrabold px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-sm">
-              <TrendingUp className="w-3 h-3" />
-              <span>{language === 'ar' ? 'شائع جداً' : language === 'en' ? 'Popular Product' : 'Produit Populaire'}</span>
+            <span className="bg-slate-950/90 backdrop-blur-md text-sky-400 border border-sky-500/30 text-[9px] font-mono font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-sm uppercase tracking-wider">
+              <TrendingUp className="w-3 h-3 text-sky-400" />
+              <span>{language === 'ar' ? 'شائع' : language === 'en' ? 'Popular' : 'Populaire'}</span>
             </span>
           )}
           {isReliable && (
-            <span className="bg-emerald-500/90 backdrop-blur-md text-white text-[9px] font-extrabold px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-sm">
-              <Award className="w-3 h-3" />
-              <span>{language === 'ar' ? 'بائع موثوق' : language === 'en' ? 'Reliable Seller' : 'Vendeur Fiable'}</span>
+            <span className="bg-slate-950/90 backdrop-blur-md text-emerald-400 border border-emerald-500/30 text-[9px] font-mono font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-sm uppercase tracking-wider">
+              <Award className="w-3 h-3 text-emerald-400" />
+              <span>{language === 'ar' ? 'موثوق' : language === 'en' ? 'Verified' : 'Certifié'}</span>
             </span>
           )}
         </div>
@@ -94,10 +94,10 @@ export default function ProductCard({ product, onAddToCart, onHeart, onShare, la
                 setLiked(!liked);
                 if (onHeart) onHeart(product);
               }}
-              className={`p-2 rounded-full backdrop-blur-md shadow-md border transition-all hover:scale-110 active:scale-90 cursor-pointer ${
+              className={`p-2 rounded-xl backdrop-blur-md shadow-md border transition-all hover:scale-110 active:scale-90 cursor-pointer ${
                 liked 
                   ? 'bg-rose-500 text-white border-rose-400' 
-                  : 'bg-white/95 text-slate-700 border-slate-100 hover:text-rose-500'
+                  : 'bg-slate-900/90 text-slate-300 border-slate-700 hover:text-rose-400'
               }`}
               title="Ajouter aux favoris"
             >
@@ -108,7 +108,7 @@ export default function ProductCard({ product, onAddToCart, onHeart, onShare, la
                 e.stopPropagation();
                 if (onShare) onShare(product);
               }}
-              className="p-2 rounded-full bg-white/95 backdrop-blur-md text-slate-700 border border-slate-100 shadow-md transition-all hover:scale-110 active:scale-90 hover:text-sky-600 cursor-pointer"
+              className="p-2 rounded-xl bg-slate-900/90 backdrop-blur-md text-slate-300 border border-slate-700 shadow-md transition-all hover:scale-110 active:scale-90 hover:text-sky-400 cursor-pointer"
               title="Partager ce produit"
             >
               <Share2 className="w-4 h-4" />
@@ -117,8 +117,8 @@ export default function ProductCard({ product, onAddToCart, onHeart, onShare, la
         )}
 
         {isOutOfStock && (
-          <div className="absolute inset-0 bg-white/80 backdrop-blur-xs flex items-center justify-center">
-            <span className="bg-rose-500 text-white font-display font-semibold text-sm px-4 py-2 rounded-xl shadow-lg">
+          <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-xs flex items-center justify-center">
+            <span className="bg-rose-600/90 border border-rose-500 text-white font-mono font-bold text-xs uppercase tracking-wider px-4 py-2 rounded-xl shadow-lg">
               {language === 'ar' ? 'نفذت الكمية' : language === 'en' ? 'Out of Stock' : 'Rupture de Stock'}
             </span>
           </div>
@@ -127,7 +127,7 @@ export default function ProductCard({ product, onAddToCart, onHeart, onShare, la
 
       {/* Product Info */}
       <div className="flex flex-1 flex-col p-5" dir={isRtl ? 'rtl' : 'ltr'}>
-        <h3 className="font-display font-semibold text-slate-800 text-base line-clamp-1 group-hover:text-sky-600 transition-colors">
+        <h3 className="font-display font-bold text-slate-100 text-base line-clamp-1 group-hover:text-sky-400 transition-colors tracking-tight">
           {product.name}
         </h3>
         
@@ -137,38 +137,38 @@ export default function ProductCard({ product, onAddToCart, onHeart, onShare, la
             {[...Array(5)].map((_, i) => (
               <Star 
                 key={i} 
-                className={`w-3.5 h-3.5 ${i < Math.floor(rating) ? 'fill-current' : 'text-slate-200'}`} 
+                className={`w-3.5 h-3.5 ${i < Math.floor(rating) ? 'fill-current' : 'text-slate-800'}`} 
               />
             ))}
           </div>
-          <span className="text-xs font-bold text-slate-700 ml-1">{rating}</span>
-          <span className="text-[10px] text-slate-400 font-medium">({reviews})</span>
+          <span className="text-xs font-mono font-bold text-slate-300 ml-1">{rating}</span>
+          <span className="text-[10px] text-slate-500 font-mono">({reviews})</span>
         </div>
 
-        <p className="mt-2 text-xs text-slate-500 line-clamp-2 h-8 leading-snug">
+        <p className="mt-2 text-xs text-slate-400 line-clamp-2 h-8 leading-snug">
           {product.description}
         </p>
 
         {/* Sales count label */}
         <div className="mt-2.5 flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-ping" />
-          <span className="text-[10px] font-extrabold text-sky-600 uppercase tracking-wider">
+          <span className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-ping" />
+          <span className="text-[10px] font-mono font-bold text-sky-400 uppercase tracking-widest">
             {translate('sales_count_label', language, { count: product.salesCount })}
           </span>
         </div>
 
         {/* Info footer */}
-        <div className="mt-auto pt-4 flex items-center justify-between border-t border-slate-50">
+        <div className="mt-auto pt-4 flex items-center justify-between border-t border-slate-800/80">
           <div className="flex flex-col">
-            <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">
+            <span className="text-[9px] uppercase font-mono font-bold text-slate-500 tracking-wider">
               {language === 'ar' ? 'السعر' : language === 'en' ? 'Price' : 'Prix'}
             </span>
             <div className="flex flex-col">
-              <span className={`text-xl font-display font-extrabold ${product.originalPrice && product.originalPrice > product.price ? 'text-red-600' : 'text-slate-900'}`}>
-                {product.price.toLocaleString('fr-DZ')} <span className="text-xs font-semibold text-sky-600 ml-0.5">DA</span>
+              <span className="text-xl font-mono font-black text-white">
+                {product.price.toLocaleString('fr-DZ')} <span className="text-xs font-mono font-semibold text-sky-400 ml-0.5">DA</span>
               </span>
               {product.originalPrice && product.originalPrice > product.price && (
-                <span className="text-[11px] text-slate-400 line-through font-mono">
+                <span className="text-[11px] text-slate-500 line-through font-mono">
                   {product.originalPrice.toLocaleString('fr-DZ')} DA
                 </span>
               )}
@@ -181,10 +181,10 @@ export default function ProductCard({ product, onAddToCart, onHeart, onShare, la
               onAddToCart(product);
             }}
             disabled={isOutOfStock}
-            className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-bold text-xs transition-all shadow-md cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl font-mono font-bold text-xs uppercase tracking-wider transition-all shadow-md cursor-pointer ${
               isOutOfStock
-                ? 'bg-slate-100 text-slate-400 shadow-none cursor-not-allowed'
-                : 'bg-sky-600 text-white hover:bg-sky-700 shadow-sky-600/15 hover:shadow-sky-600/25'
+                ? 'bg-slate-800 text-slate-500 shadow-none cursor-not-allowed border border-slate-700'
+                : 'bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white border border-sky-400/30 shadow-sky-500/20 active:scale-95'
             }`}
             id={`add-to-cart-${product.id}`}
           >
